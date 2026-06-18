@@ -1,0 +1,12 @@
+# Mobile App Dependencies
+agri-guard-app/node_modules/
+agri-guard-app/.expo/
+agri-guard-app/ios/
+agri-guard-app/android/
+
+# Backend Uploads
+backend/uploads/
+
+# OS Files
+.DS_Store
+Thumbs.db

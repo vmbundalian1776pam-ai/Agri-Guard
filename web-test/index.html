@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agri-Guard Web Tester</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        h1 { color: #2c3e50; text-align: center; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .field-list { display: flex; gap: 10px; margin-bottom: 20px; }
+        .field-card { padding: 15px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; flex: 1; text-align: center; background-color: #ecf0f1; transition: background 0.3s; }
+        .field-card:hover { background-color: #d5dbdb; }
+        .field-card.active { border-color: #27ae60; background-color: #eafaf1; }
+        .status-healthy { color: #27ae60; font-weight: bold; }
+        .status-attention { color: #e74c3c; font-weight: bold; }
+        .upload-section { border: 2px dashed #bdc3c7; padding: 20px; text-align: center; border-radius: 5px; margin-top: 20px; }
+        .upload-btn { background-color: #2980b9; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        .upload-btn:hover { background-color: #2471a3; }
+        .result-section { margin-top: 20px; padding: 15px; background: #fdfefe; border: 1px solid #e5e8e8; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Agri-Guard Web Tester</h1>
+    
+    <h3>Select a Field:</h3>
+    <div class="field-list" id="fieldList">
+        <div class="field-card active" data-id="1">North Corn Field</div>
+        <div class="field-card" data-id="2">Tomato Greenhouse</div>
+    </div>
+
+    <div class="upload-section">
+        <h3>Upload Plant Image for Analysis</h3>
+        <input type="file" id="imageInput" accept="image/*">
+        <br>
+        <button class="upload-btn" id="uploadBtn">Analyze Image</button>
+        <p id="loadingText" style="display:none; color: #7f8c8d;">Analyzing with Gemini AI...</p>
+    </div>
+
+    <div class="result-section" id="resultSection">
+        <h3>Analysis Result</h3>
+        <p><strong>Status:</strong> <span id="resStatus"></span></p>
+        <p><strong>Disease Detected:</strong> <span id="resDisease"></span></p>
+        <p><strong>Confidence:</strong> <span id="resConfidence"></span>%</p>
+        <p><strong>Recommendation:</strong> <span id="resRecommendation"></span></p>
+    </div>
+</div>
+
+<script>
+    let selectedFieldId = 1;
+
+    // Handle field selection
+    document.querySelectorAll('.field-card').forEach(card => {
+        card.addEventListener('click', function() {
+            document.querySelectorAll('.field-card').forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            selectedFieldId = this.getAttribute('data-id');
+        });
+    });
+
+    // Handle Image Upload
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('imageInput');
+        if (fileInput.files.length === 0) {
+            alert('Please select an image first.');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('field_id', selectedFieldId);
+
+        document.getElementById('loadingText').style.display = 'block';
+        document.getElementById('resultSection').style.display = 'none';
+
+        try {
+            const response = await fetch('../backend/upload_image.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            document.getElementById('loadingText').style.display = 'none';
+            
+            if (result.status === 'success') {
+                document.getElementById('resultSection').style.display = 'block';
+                document.getElementById('resStatus').textContent = result.data.field_status;
+                document.getElementById('resStatus').className = result.data.field_status === 'healthy' ? 'status-healthy' : 'status-attention';
+                document.getElementById('resDisease').textContent = result.data.disease;
+                document.getElementById('resConfidence').textContent = (result.data.confidence * 100).toFixed(0);
+                document.getElementById('resRecommendation').textContent = result.data.recommendation;
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to connect to the backend.');
+            document.getElementById('loadingText').style.display = 'none';
+        }
+    });
+</script>
+
+</body>
+</html>

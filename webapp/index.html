@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Agri-Guard Web App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="mobile-frame">
+        <!-- Status Bar Simulator -->
+        <div class="status-bar">
+            <span>9:41</span>
+            <div class="status-icons">
+                <i class="fas fa-signal"></i>
+                <i class="fas fa-wifi"></i>
+                <i class="fas fa-battery-full"></i>
+            </div>
+        </div>
+
+        <!-- App Content Area -->
+        <div class="app-content" id="app-content">
+            
+            <!-- VIEW: Dashboard -->
+            <div id="view-dashboard" class="view active-view">
+                <div class="header">
+                    <h1>My Fields</h1>
+                    <p class="subtitle">Agri-Guard Monitoring</p>
+                </div>
+                
+                <div class="dashboard-scroll" id="field-list">
+                    <!-- Fields injected by JS -->
+                    <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading fields...</div>
+                </div>
+            </div>
+
+            <!-- VIEW: Field Detail & Scan -->
+            <div id="view-field" class="view">
+                <div class="header header-with-back">
+                    <button class="icon-btn" onclick="goBack()"><i class="fas fa-chevron-left"></i></button>
+                    <h1 id="detail-field-name">Field Name</h1>
+                    <div style="width: 24px;"></div> <!-- Spacer for flex alignment -->
+                </div>
+                
+                <div class="detail-scroll">
+                    <!-- Status Card -->
+                    <div class="glass-card status-card">
+                        <h3>Current Status</h3>
+                        <div class="badge badge-unknown" id="detail-field-status">UNKNOWN</div>
+                    </div>
+
+                    <!-- Scan Section -->
+                    <div class="scan-section glass-card">
+                        <div class="scan-icon-container">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <h3>AI Plant Analysis</h3>
+                        <p>Upload a plant photo to simulate the ESP32 camera scan.</p>
+                        
+                        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('imageInput').click()">
+                            <i class="fas fa-upload"></i> Choose Photo
+                        </button>
+                        
+                        <div id="upload-progress" class="hidden">
+                            <i class="fas fa-spinner fa-spin"></i> Analyzing with Gemini AI...
+                        </div>
+                    </div>
+
+                    <!-- Results Section (Hidden initially) -->
+                    <div id="result-section" class="glass-card hidden result-card">
+                        <h3 style="color: #2c3e50;"><i class="fas fa-poll-h"></i> Scan Result</h3>
+                        <div class="result-row">
+                            <span>Status:</span> <span id="resStatus" class="font-bold"></span>
+                        </div>
+                        <div class="result-row">
+                            <span>Disease:</span> <span id="resDisease" class="font-bold"></span>
+                        </div>
+                        <div class="result-row">
+                            <span>Confidence:</span> <span id="resConfidence" class="font-bold"></span>
+                        </div>
+                        <div class="result-row recommendation">
+                            <span><i class="fas fa-info-circle"></i> Advice:</span> <span id="resRecommendation"></span>
+                        </div>
+                    </div>
+
+                    <!-- History Section -->
+                    <h3 class="section-title">Recent Scans</h3>
+                    <div id="scan-history">
+                        <!-- History injected by JS -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <button class="nav-item active" onclick="showDashboard()">
+                <i class="fas fa-leaf"></i>
+                <span>Fields</span>
+            </button>
+            <button class="nav-item">
+                <i class="fas fa-cog"></i>
+                <span>Settings</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>
