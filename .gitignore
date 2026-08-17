@@ -6,6 +6,11 @@ agri-guard-app/android/
 
 # Backend Uploads
 backend/uploads/
+capture_test.jpg
+
+# AI Server Dataset & Temp Uploads
+backend/ai_server/dataset/
+backend/ai_server/temp_uploads/
 
 # OS Files
 .DS_Store

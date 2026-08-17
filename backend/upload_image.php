@@ -28,38 +28,17 @@ $filename = uniqid() . '.' . $file_extension;
 $target_file = $upload_dir . $filename;
 
 if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
+    // Call LOCAL Python AI Server
+    $api_url = "http://127.0.0.1:5000/predict";
     
-    // Convert image to base64 for Gemini API
-    $image_data = base64_encode(file_get_contents($target_file));
-    $mime_type = mime_content_type($target_file);
-    
-    // Call Gemini API
-    $api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $gemini_api_key;
-    
-    $prompt = "Analyze this image of a plant. Determine if it is healthy or if it has a disease. If it has a disease, provide the disease name and a brief recommendation. Return the response in strict JSON format like this: {\"status\": \"healthy\" | \"attention_needed\", \"disease\": \"disease name or none\", \"recommendation\": \"brief advice or none\", \"confidence\": 0.95}";
-    
-    $post_data = [
-        "contents" => [
-            [
-                "parts" => [
-                    ["text" => $prompt],
-                    [
-                        "inlineData" => [
-                            "mimeType" => $mime_type,
-                            "data" => $image_data
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    ];
+    // Create a CURLFile object
+    $cfile = new CURLFile($target_file, mime_content_type($target_file), basename($target_file));
+    $post_data = array('image' => $cfile);
     
     $ch = curl_init($api_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($post_data));
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Fixes XAMPP SSL certificate issues
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
     
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -71,25 +50,23 @@ if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
     $field_status = "unknown";
     
     if ($http_code == 200 && $response) {
-        $gemini_response = json_decode($response, true);
-        if (isset($gemini_response['candidates'][0]['content']['parts'][0]['text'])) {
-            $text = $gemini_response['candidates'][0]['content']['parts'][0]['text'];
-            
-            // Clean up backticks if Gemini returned markdown json
-            $text = str_replace(['```json', '```'], '', $text);
-            $parsed_ai = json_decode(trim($text), true);
-            
-            if ($parsed_ai) {
-                $field_status = $parsed_ai['status'] ?? 'unknown';
-                $result_disease = $parsed_ai['disease'] ?? 'Unknown';
-                $recommendation = $parsed_ai['recommendation'] ?? '';
-                $confidence = isset($parsed_ai['confidence']) ? floatval($parsed_ai['confidence']) : 0;
+        $parsed_ai = json_decode($response, true);
+        if ($parsed_ai && !isset($parsed_ai['error'])) {
+            $field_status = $parsed_ai['status'] ?? 'unknown';
+            $result_disease = $parsed_ai['disease'] ?? 'Unknown';
+            $recommendation = $parsed_ai['recommendation'] ?? '';
+            $confidence = isset($parsed_ai['confidence']) ? floatval($parsed_ai['confidence']) : 0;
+            if ($confidence > 0 && $confidence <= 1.0) {
+                $confidence = $confidence * 100;
             }
+            $confidence = round($confidence, 2);
+        } else {
+            $recommendation = "AI Server Error: " . ($parsed_ai['error'] ?? 'Unknown JSON error');
         }
     } else {
         // Log exact API error for debugging
         $curl_err = curl_error($ch);
-        $recommendation = "Debug: HTTP $http_code. cURL Error: $curl_err. Response: " . substr($response, 0, 100);
+        $recommendation = "Debug: AI Server is not running. HTTP $http_code. Make sure app.py is running on port 5000.";
     }
 
     // Save scan to database

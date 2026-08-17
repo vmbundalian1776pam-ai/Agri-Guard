@@ -9,7 +9,7 @@ const char* ssid = "Mi Note 10 Lite";
 const char* password = "0123456789";
 
 // 2. YOUR LAPTOP'S HOTSPOT IP ADDRESS
-String serverName = "http://10.128.2.141/Agri-Guard/backend/upload_image.php";
+String serverName = "http://192.168.100.16/Agri-Guard/backend/upload_image.php";
 
 // 3. THE FIELD ID THIS CAMERA IS MONITORING
 String fieldId = "1"; 
@@ -126,7 +126,7 @@ void sendPhoto(camera_fb_t * fb) {
   Serial.println("Uploading to server...");
   
   WiFiClient client;
-  const char* host = "10.128.2.141";
+  const char* host = "192.168.100.16";
   const int port = 80;
   
   if (!client.connect(host, port)) {
@@ -142,7 +142,7 @@ void sendPhoto(camera_fb_t * fb) {
 
   // Send HTTP Headers
   client.println("POST /Agri-Guard/backend/upload_image.php HTTP/1.1");
-  client.println("Host: 10.128.2.141");
+  client.println("Host: 192.168.100.16");
   client.println("Content-Type: multipart/form-data; boundary=" + boundary);
   client.println("Content-Length: " + String(totalLen));
   client.println(); // Empty line signifies end of headers

@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS scans (
     FOREIGN KEY (field_id) REFERENCES fields(id) ON DELETE CASCADE
 );
 
--- Insert some dummy data for initial testing
-INSERT INTO fields (name, location, status) VALUES 
-('North Corn Field', 'Zone A', 'healthy'),
-('Tomato Greenhouse', 'Zone B', 'attention_needed');
+-- Insert a single field for our Eggplant Rover project
+INSERT INTO fields (id, name, location, status) VALUES 
+(1, 'Eggplant Field', 'Main Zone', 'unknown');
