@@ -37,16 +37,23 @@ def load_ai_assets():
 
 def generate_recommendation(disease_name):
     disease_lower = disease_name.lower()
+    
     if 'healthy' in disease_lower:
-        return "The plant looks healthy! Keep up the good work with watering and sunlight."
-    elif 'blight' in disease_lower:
-        return "Blight detected. Remove infected leaves immediately and apply a copper-based fungicide. Avoid watering the leaves directly."
-    elif 'rust' in disease_lower:
-        return "Rust detected. Remove infected leaves and improve air circulation around the plant. Apply neem oil or fungicide."
+        return "Plant is healthy and showing vigorous foliage. Maintain regular drip irrigation, monitor soil moisture, and continue routine weed and nutrient management."
+    elif 'insect' in disease_lower or 'pest' in disease_lower:
+        return "Insect pest damage detected (e.g., shoot borers, aphids, or flea beetles). Prune and destroy infested shoots. Spray organic neem oil (2-3%) or use recommended biological insecticides (e.g., Bacillus thuringiensis) early in the morning."
     elif 'spot' in disease_lower:
-        return "Leaf spot detected. Ensure you are not overwatering and keep the leaves dry. Apply fungicide if severe."
+        return "Fungal leaf spot detected (Cercospora/Alternaria). Remove infected lower leaves to prevent spore splash. Avoid overhead watering to keep foliage dry, and apply a copper-based or Mancozeb fungicide."
+    elif 'mosaic' in disease_lower:
+        return "Mosaic virus detected. Viruses cannot be cured once inside the plant. Remove and safely dispose of infected plants immediately. Control sap-sucking insect vectors (aphids/whiteflies) using yellow sticky traps or insecticidal soap."
+    elif 'small leaf' in disease_lower or 'little leaf' in disease_lower:
+        return "Little Leaf Disease detected (caused by phytoplasma). Uproot and discard severely stunted plants. Control leafhopper insect vectors by applying systemic insecticides (like Dimethoate) or neem-based sprays."
+    elif 'white mold' in disease_lower or 'mold' in disease_lower:
+        return "White mold fungus detected (Sclerotinia). Immediately prune affected stems and clean up fallen plant debris. Reduce soil moisture, increase sunlight exposure, and apply a bio-fungicide (Trichoderma) around the base."
+    elif 'wilt' in disease_lower:
+        return "Wilt disease detected (bacterial or fungal vascular blockage). Remove wilted plants along with root soil to prevent spread. Ensure proper field drainage, avoid over-irrigation, and treat root zones with copper oxychloride."
     else:
-        return "Disease detected. Please isolate the plant, remove heavily affected areas, and consult a local agricultural extension for specific treatments."
+        return "Crop anomaly detected. Isolate affected leaves, sanitize farm tools, ensure proper soil drainage, and consult a local agricultural extension specialist."
 
 @app.route('/predict', methods=['POST'])
 def predict():
