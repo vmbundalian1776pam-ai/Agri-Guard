@@ -9,6 +9,14 @@ CREATE TABLE IF NOT EXISTS fields (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('owner', 'farmer') NOT NULL DEFAULT 'farmer',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS scans (
     id INT AUTO_INCREMENT PRIMARY KEY,
     field_id INT NOT NULL,
@@ -20,6 +28,8 @@ CREATE TABLE IF NOT EXISTS scans (
     FOREIGN KEY (field_id) REFERENCES fields(id) ON DELETE CASCADE
 );
 
--- Insert a single field for our Eggplant Rover project
-INSERT INTO fields (id, name, location, status) VALUES 
-(1, 'Eggplant Field', 'Main Zone', 'unknown');
+-- Pre-seed the single field
+INSERT IGNORE INTO fields (id, name, location, status) VALUES (1, 'Eggplant Field', 'Main Zone', 'unknown');
+
+-- Pre-seed the admin user (plain text password, will be handled by API or updated)
+INSERT IGNORE INTO users (username, password, role) VALUES ('admin', 'admin123', 'owner');

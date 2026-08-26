@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,11 +10,13 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { API_BASE_URL } from '../../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Load the MJPEG stream in an HTML page with auto-refresh fallback
 const getStreamHtml = (ip: string) => `
@@ -77,9 +79,40 @@ export default function RoverScreen() {
   const [connectedIp, setConnectedIp] = useState('');
   const [lightOn, setLightOn] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [isScanMode, setIsScanMode] = useState(false); // pauses stream so ESP32 is free for capture
+  const [isScanMode, setIsScanMode] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [isPatrolling, setIsPatrolling] = useState(false);
+  const [patrolStep, setPatrolStep] = useState('');
+  const patrolActiveRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
+
+  // Saved IPs
+  const [savedIps, setSavedIps] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Load saved IPs from storage on mount
+  useEffect(() => {
+    const loadSavedIps = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('savedRoverIps');
+        if (stored) setSavedIps(JSON.parse(stored));
+      } catch (e) {}
+    };
+    loadSavedIps();
+  }, []);
+
+  const saveCurrentIp = async (ip: string) => {
+    if (!ip.trim()) return;
+    const updated = [ip.trim(), ...savedIps.filter(s => s !== ip.trim())].slice(0, 5); // keep max 5
+    setSavedIps(updated);
+    await AsyncStorage.setItem('savedRoverIps', JSON.stringify(updated));
+  };
+
+  const deleteIp = async (ip: string) => {
+    const updated = savedIps.filter(s => s !== ip);
+    setSavedIps(updated);
+    await AsyncStorage.setItem('savedRoverIps', JSON.stringify(updated));
+  };
 
   const sendCommand = async (action: string) => {
     if (!connectedIp) return;
@@ -93,9 +126,18 @@ export default function RoverScreen() {
 
   const handleConnect = () => {
     Keyboard.dismiss();
+    setShowDropdown(false);
     if (roverIp.trim()) {
       setConnectedIp(roverIp.trim());
+      saveCurrentIp(roverIp.trim());
     }
+  };
+
+  const handleSelectIp = (ip: string) => {
+    setRoverIp(ip);
+    setConnectedIp(ip);
+    setShowDropdown(false);
+    saveCurrentIp(ip);
   };
 
   const handleScan = async () => {
@@ -131,6 +173,71 @@ export default function RoverScreen() {
     return num.toFixed(2);
   };
 
+  const stopPatrol = () => {
+    patrolActiveRef.current = false;
+    setIsPatrolling(false);
+    setPatrolStep('');
+    sendCommand('stop');
+  };
+
+  const startPatrol = async () => {
+    if (!connectedIp) return;
+    patrolActiveRef.current = true;
+    setIsPatrolling(true);
+
+    let cycle = 0;
+    while (patrolActiveRef.current) {
+      cycle++;
+      // Step 1: Drive forward
+      setPatrolStep(`Cycle ${cycle}: Moving forward...`);
+      sendCommand('go');
+      await new Promise(r => setTimeout(r, 3000));
+      if (!patrolActiveRef.current) break;
+
+      // Step 2: Stop
+      sendCommand('stop');
+      setPatrolStep(`Cycle ${cycle}: Stopped — preparing to scan...`);
+      await new Promise(r => setTimeout(r, 1000));
+      if (!patrolActiveRef.current) break;
+
+      // Step 3: Scan crop (same as tapping Scan Crop manually)
+      setPatrolStep(`Cycle ${cycle}: Scanning crop...`);
+      setIsScanning(true);
+      setIsScanMode(true);
+      await new Promise(r => setTimeout(r, 2000));
+
+      if (!patrolActiveRef.current) {
+        setIsScanning(false);
+        setIsScanMode(false);
+        break;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/rover_scan.php?rover_ip=${connectedIp}`);
+        const result = await response.json();
+        if (result.status === 'success') {
+          setScanResult(result.data);
+          // Patrol pauses here — resumes when user closes the result modal
+          patrolActiveRef.current = false;
+          setIsPatrolling(false);
+          setPatrolStep('');
+        }
+      } catch (error) {
+        console.error('Patrol scan failed:', error);
+      } finally {
+        setIsScanning(false);
+        setIsScanMode(false);
+      }
+
+      // Wait a moment before next cycle
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    sendCommand('stop');
+    setIsPatrolling(false);
+    setPatrolStep('');
+  };
+
   const toggleLight = () => {
     const cmd = lightOn ? 'ledoff' : 'ledon';
     sendCommand(cmd);
@@ -157,12 +264,46 @@ export default function RoverScreen() {
             keyboardType="decimal-pad"
             returnKeyType="done"
             onSubmitEditing={handleConnect}
+            onFocus={() => savedIps.length > 0 && setShowDropdown(true)}
             autoCorrect={false}
           />
+          {savedIps.length > 0 && (
+            <TouchableOpacity
+              style={styles.dropdownToggle}
+              onPress={() => setShowDropdown(!showDropdown)}
+            >
+              <Text style={{ color: '#fff', fontSize: 16 }}>▾</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.connectBtn} onPress={handleConnect}>
             <Text style={styles.connectBtnText}>Connect</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Saved IPs Dropdown */}
+        {showDropdown && savedIps.length > 0 && (
+          <View style={styles.dropdown}>
+            {savedIps.map((ip) => (
+              <View key={ip} style={styles.dropdownRow}>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => handleSelectIp(ip)}
+                >
+                  <Text style={styles.dropdownItemText}>📡 {ip}</Text>
+                  {ip === connectedIp && (
+                    <Text style={styles.dropdownConnectedBadge}>✅ Connected</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dropdownDeleteBtn}
+                  onPress={() => deleteIp(ip)}
+                >
+                  <Text style={styles.dropdownDeleteText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Connection status */}
         {connectedIp ? (
@@ -260,10 +401,10 @@ export default function RoverScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: connectedIp ? '#3498db' : '#333' }]}
               onPress={handleScan}
-              disabled={!connectedIp || isScanning}
+              disabled={!connectedIp || isScanning || isPatrolling}
               activeOpacity={0.8}
             >
-              {isScanning ? (
+              {isScanning && !isPatrolling ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.actionBtnText}>📸 Scan Crop</Text>
@@ -281,6 +422,32 @@ export default function RoverScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Auto Patrol Button */}
+          <View style={[styles.row, { marginTop: 10 }]}>
+            <TouchableOpacity
+              style={[
+                styles.patrolBtn,
+                { backgroundColor: !connectedIp ? '#333' : isPatrolling ? '#e74c3c' : '#8e44ad' }
+              ]}
+              onPress={isPatrolling ? stopPatrol : startPatrol}
+              disabled={!connectedIp || isScanning}
+              activeOpacity={0.8}
+            >
+              {isPatrolling && isScanning ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.actionBtnText}>
+                  {isPatrolling ? '⏹ Stop Patrol' : '🤖 Auto Patrol'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Patrol Status */}
+          {isPatrolling && patrolStep ? (
+            <Text style={styles.patrolStatus}>{patrolStep}</Text>
+          ) : null}
         </View>
 
         {/* Scan Result Modal */}
@@ -380,6 +547,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  dropdownToggle: {
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdown: {
+    marginHorizontal: 16,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  dropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  dropdownItem: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dropdownItemText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  dropdownConnectedBadge: {
+    fontSize: 11,
+    color: '#2ecc71',
+  },
+  dropdownDeleteBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownDeleteText: {
+    color: '#e74c3c',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   statusText: {
     color: '#666',
     fontSize: 12,
@@ -452,6 +669,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  patrolBtn: {
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  patrolStatus: {
+    color: '#8e44ad',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   modalBackground: {
     flex: 1,

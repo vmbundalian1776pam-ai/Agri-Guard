@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_BASE_URL } from '../../config';
@@ -36,6 +37,31 @@ export default function DashboardScreen() {
   const [fieldData, setFieldData] = useState<FieldStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Watering System State
+  const [isWatering, setIsWatering] = useState(false);
+  const [waterLoading, setWaterLoading] = useState(false);
+  
+  // The IP Address of the new ESP32 Watering System
+  const WATER_SYSTEM_IP = 'http://192.168.100.225';
+
+  const toggleWatering = async () => {
+    setWaterLoading(true);
+    try {
+      const endpoint = isWatering ? '/water_off' : '/water_on';
+      const response = await fetch(`${WATER_SYSTEM_IP}${endpoint}`);
+      if (response.ok) {
+        setIsWatering(!isWatering);
+      } else {
+        console.error("Failed to toggle watering system");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Could not connect to the watering system. Make sure you are on the same Wi-Fi.");
+    } finally {
+      setWaterLoading(false);
+    }
+  };
 
   const fetchFieldStatus = async () => {
     try {
@@ -123,6 +149,30 @@ export default function DashboardScreen() {
           🕒 Last scanned:{' '}
           {latestScan ? formatTime(latestScan.created_at) : 'Never'}
         </Text>
+      </View>
+
+      {/* Watering System Control */}
+      <View style={styles.waterCard}>
+        <View style={styles.waterHeader}>
+          <Text style={styles.sectionTitle}>💧 Irrigation System</Text>
+          <View style={styles.waterStatusBadge}>
+            <Text style={styles.waterStatusText}>{isWatering ? 'RUNNING' : 'STANDBY'}</Text>
+          </View>
+        </View>
+        
+        <TouchableOpacity 
+          style={[styles.waterBtn, isWatering ? styles.waterBtnOff : styles.waterBtnOn]} 
+          onPress={toggleWatering}
+          disabled={waterLoading}
+        >
+          {waterLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.waterBtnText}>
+              {isWatering ? 'Stop Watering' : 'Start Watering Crops'}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Latest Diagnosis Section */}
@@ -247,6 +297,52 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  waterCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 16,
+    borderLeftWidth: 6,
+    borderLeftColor: '#3498db',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  waterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  waterStatusBadge: {
+    backgroundColor: '#ecf0f1',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  waterStatusText: {
+    color: '#7f8c8d',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  waterBtn: {
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  waterBtnOn: {
+    backgroundColor: '#3498db',
+  },
+  waterBtnOff: {
+    backgroundColor: '#e74c3c',
+  },
+  waterBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   latestDiagnosisCard: {
     backgroundColor: '#fff',
