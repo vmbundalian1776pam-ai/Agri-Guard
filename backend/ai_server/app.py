@@ -75,21 +75,86 @@ def predict():
         try:
             # Preprocess the image exactly how it was trained
             img = Image.open(filepath).convert('RGB')
-            img = img.resize((224, 224))
-            img_array = np.array(img) / 255.0  # Normalize to 0-1
-            img_array = np.expand_dims(img_array, axis=0) # Add batch dimension
+            img_resized = img.resize((224, 224))
             
-            # Predict
-            predictions = model.predict(img_array)
-            predicted_class_idx = np.argmax(predictions[0])
-            confidence = float(predictions[0][predicted_class_idx])
+            # --- COLOR HEURISTIC FILTER (The "Is this actually a plant?" check) ---
+            # Neural networks are easily tricked by out-of-context images (like a white cat)
+            # because they try to force every image into one of the 7 leaf categories.
+            # To fix this, we analyze the actual colors in the image using HSV.
+            hsv_img = np.array(img_resized.convert('HSV'))
+            H = hsv_img[:, :, 0] # Hue (Color: 0-255)
+            S = hsv_img[:, :, 1] # Saturation (Grey vs Colorful: 0-255)
+            V = hsv_img[:, :, 2] # Value (Dark vs Bright: 0-255)
             
-            disease_name = class_names.get(predicted_class_idx, "Unknown")
+            # In PIL's 0-255 scale: ~10 to 120 covers Browns, Yellows, and Greens
+            # S > 25 excludes pure white/grey (like the cat or a wall)
+            # V > 25 excludes pitch black shadows
+            plant_pixels = (H >= 10) & (H <= 120) & (S >= 25) & (V >= 25)
+            plant_ratio = np.mean(plant_pixels)
             
-            # Format output for Agri-Guard
-            is_healthy = 'healthy' in disease_name.lower()
-            status = "healthy" if is_healthy else "attention_needed"
-            recommendation = generate_recommendation(disease_name)
+            # If less than 5% of the image contains plant-like colors, reject it immediately
+            if plant_ratio < 0.05:
+                os.remove(filepath)
+                return jsonify({
+                    "status": "unknown",
+                    "disease": "Not a Plant / Unrecognized",
+                    "recommendation": "AI Rejected: The camera did not detect enough plant colors (green, yellow, or brown). Please ensure a crop leaf is clearly in the frame.",
+                    "confidence": 0.0
+                })
+
+            # --- IMAGE ENHANCEMENT ---
+            # Boost contrast and sharpness to highlight small details like insect bites
+            from PIL import ImageEnhance
+            img_enhanced = ImageEnhance.Contrast(img_resized).enhance(1.2)
+            img_enhanced = ImageEnhance.Sharpness(img_enhanced).enhance(1.5)
+
+            # --- TEST-TIME AUGMENTATION (TTA) ---
+            # Generate 4 variations of the image. This forces the AI to look at the leaf from multiple angles
+            img_1 = img_enhanced
+            img_2 = img_enhanced.rotate(90)
+            img_3 = img_enhanced.transpose(Image.FLIP_LEFT_RIGHT)
+            img_4 = img_enhanced.rotate(180)
+            
+            variations = [img_1, img_2, img_3, img_4]
+            batch_array = []
+            for v in variations:
+                arr = np.array(v) / 255.0
+                batch_array.append(arr)
+            
+            batch_array = np.array(batch_array)
+            
+            # Predict all 4 at once
+            predictions = model.predict(batch_array)
+            
+            # Average the probabilities across all 4 angles
+            avg_predictions = np.mean(predictions, axis=0)
+            
+            # --- HEALTHY BIAS PENALTY ---
+            # AI models often default to "healthy" if they are lazy. 
+            # We manually penalize the 'healthy' score by 20% to force the model to only guess healthy if it's ABSOLUTELY certain.
+            for idx, name in class_names.items():
+                if 'healthy' in name.lower():
+                    avg_predictions[idx] *= 0.80 
+            
+            # Re-normalize so percentages add up to 100%
+            avg_predictions = avg_predictions / np.sum(avg_predictions)
+            
+            predicted_class_idx = np.argmax(avg_predictions)
+            confidence = float(avg_predictions[predicted_class_idx])
+            
+            # --- OUT OF DISTRIBUTION FILTER ---
+            # CNNs will try to classify anything (even a wall or shoe) into one of the 7 leaf categories.
+            # Usually, when it's a random object, the confidence drops because it doesn't match perfectly.
+            # We enforce a strict 75% confidence threshold.
+            if confidence < 0.75:
+                disease_name = "Not a Plant / Unrecognized"
+                status = "unknown"
+                recommendation = "The AI could not confidently identify a crop in this image. Please ensure the rover camera is clearly pointed at a plant leaf and try scanning again."
+            else:
+                disease_name = class_names.get(predicted_class_idx, "Unknown")
+                is_healthy = 'healthy' in disease_name.lower()
+                status = "healthy" if is_healthy else "attention_needed"
+                recommendation = generate_recommendation(disease_name)
             
             # Cleanup temp file
             os.remove(filepath)

@@ -9,6 +9,9 @@ if (!isset($_GET['field_id'])) {
 
 $field_id = intval($_GET['field_id']);
 
+// --- AUTO-CLEANUP: Delete scans older than 2 months to prevent storage bloat ---
+$conn->query("DELETE FROM scans WHERE field_id = $field_id AND created_at < NOW() - INTERVAL 2 MONTH");
+
 // Get field info
 $stmt = $conn->prepare("SELECT * FROM fields WHERE id = ?");
 $stmt->bind_param("i", $field_id);
@@ -21,8 +24,8 @@ if (!$field) {
     exit;
 }
 
-// Get recent scans for this field
-$stmt = $conn->prepare("SELECT * FROM scans WHERE field_id = ? ORDER BY created_at DESC LIMIT 10");
+// Get ALL scans for this field (no limit) — ordered newest first
+$stmt = $conn->prepare("SELECT * FROM scans WHERE field_id = ? ORDER BY created_at DESC");
 $stmt->bind_param("i", $field_id);
 $stmt->execute();
 $scans_result = $stmt->get_result();
@@ -32,7 +35,27 @@ while($row = $scans_result->fetch_assoc()) {
     $scans[] = $row;
 }
 
+// Derive the field's current status from the most recent scan
+if (!empty($scans)) {
+    $latest = $scans[0];
+    if ($latest['result_disease'] === 'Not a Plant / Unrecognized') {
+        // Don't let a bad scan override the field status; keep checking further back
+        $field['status'] = 'unknown';
+        foreach ($scans as $scan) {
+            if ($scan['result_disease'] !== 'Not a Plant / Unrecognized') {
+                $field['status'] = (stripos($scan['result_disease'], 'healthy') !== false) ? 'healthy' : 'attention_needed';
+                break;
+            }
+        }
+    } else {
+        $field['status'] = (stripos($latest['result_disease'], 'healthy') !== false) ? 'healthy' : 'attention_needed';
+    }
+} else {
+    $field['status'] = 'unknown';
+}
+
 $field['recent_scans'] = $scans;
+$field['total_scans'] = count($scans);
 
 echo json_encode(["status" => "success", "data" => $field]);
 $conn->close();

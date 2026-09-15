@@ -15,6 +15,15 @@ if (isset($_GET['username']) && isset($_GET['password'])) {
     if ($row = $result->fetch_assoc()) {
         // Verify hashed password or plain text fallback (for testing)
         if (password_verify($password, $row['password']) || $password === $row['password']) {
+            // Insert audit log (wrapped safely — won't break login if table missing)
+            try {
+                $log_stmt = $conn->prepare("INSERT INTO audit_logs (user_id, action) VALUES (?, 'login')");
+                if ($log_stmt) {
+                    $log_stmt->bind_param("i", $row['id']);
+                    $log_stmt->execute();
+                }
+            } catch (Exception $e) { /* ignore */ }
+
             echo json_encode([
                 "status" => "success",
                 "user" => [
