@@ -3,8 +3,8 @@
 
 // --- SETTINGS ---
 // Replace these with the exact same Wi-Fi you use for your Rover and Laptop
-const char* ssid = "YOUR_WIFI_NAME";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "HUAWEI-2.4G-b6Ht";
+const char* password = "HpzB6x9Z";
 
 // The pin you connected to the Relay 'IN' (G13)
 const int RELAY_PIN = 13;
