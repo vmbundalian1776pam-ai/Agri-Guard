@@ -34,6 +34,8 @@ interface FieldStatus {
   created_at: string;
   recent_scans: Scan[];
   total_scans: number;
+  latest_moisture?: number | null;
+  moisture_updated_at?: string | null;
 }
 
 export default function DashboardScreen() {
@@ -197,12 +199,45 @@ export default function DashboardScreen() {
         <View style={styles.waterHeader}>
           <View style={styles.waterTitleRow}>
             <Text style={styles.waterIcon}>💧</Text>
-            <Text style={styles.sectionTitle}>Irrigation</Text>
+            <Text style={styles.sectionTitle}>Irrigation & Soil Status</Text>
           </View>
           <View style={styles.waterStatusBadge}>
             <Text style={styles.waterStatusText}>{isWatering ? 'RUNNING' : 'STANDBY'}</Text>
           </View>
         </View>
+
+        {/* Soil Moisture Telemetry */}
+        <View style={styles.homeMoistureRow}>
+          <View style={styles.homeMoistureInfo}>
+            <Text style={styles.homeMoistureLabel}>Latest Soil Moisture</Text>
+            {fieldData?.latest_moisture !== undefined && fieldData?.latest_moisture !== null ? (
+              <View style={styles.homeMoistureValRow}>
+                <Text style={styles.homeMoistureValue}>{Number(fieldData.latest_moisture)}%</Text>
+                <View style={[
+                  styles.homeMoistureBadge,
+                  { backgroundColor: Number(fieldData.latest_moisture) < 35 ? '#7f1d1d' : '#064e3b' }
+                ]}>
+                  <Text style={[
+                    styles.homeMoistureBadgeText,
+                    { color: Number(fieldData.latest_moisture) < 35 ? '#f87171' : '#34d399' }
+                  ]}>
+                    {Number(fieldData.latest_moisture) < 35 ? '⚠️ WATER NEEDED' : '✅ SOIL MOIST'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.homeMoistureEmpty}>No moisture test recorded yet</Text>
+            )}
+          </View>
+        </View>
+
+        {fieldData?.latest_moisture !== undefined && fieldData?.latest_moisture !== null ? (
+          <Text style={styles.homeMoistureAdvice}>
+            {Number(fieldData.latest_moisture) < 35 
+              ? 'Soil is dry (under 35%). Tap below to start irrigation.' 
+              : 'Soil moisture is optimal. Irrigation not required.'}
+          </Text>
+        ) : null}
         
         <TouchableOpacity 
           style={[styles.waterBtn, isWatering ? styles.waterBtnOff : styles.waterBtnOn]} 
@@ -519,6 +554,55 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+  },
+  homeMoistureRow: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  homeMoistureInfo: {
+    gap: 4,
+  },
+  homeMoistureLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  homeMoistureValRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  homeMoistureValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#f1f1f1',
+  },
+  homeMoistureBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  homeMoistureBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  homeMoistureEmpty: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  homeMoistureAdvice: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginBottom: 14,
+    lineHeight: 18,
   },
   waterBtn: {
     paddingVertical: 14,

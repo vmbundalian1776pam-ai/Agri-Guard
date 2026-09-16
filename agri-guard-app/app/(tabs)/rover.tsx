@@ -87,8 +87,9 @@ export default function RoverScreen() {
   const inputRef = useRef<TextInput>(null);
 
   // Soil Moisture State
-  const [moistureData, setMoistureData] = useState<{ percentage: number; level: string } | null>(null);
+  const [moistureData, setMoistureData] = useState<{ percentage: number; level: string; needsWatering: boolean } | null>(null);
   const [moistureLoading, setMoistureLoading] = useState(false);
+  const [samplingText, setSamplingText] = useState('');
 
   const measureSoilMoisture = async () => {
     if (!connectedIp) {
@@ -96,11 +97,25 @@ export default function RoverScreen() {
       return;
     }
     setMoistureLoading(true);
+    setSamplingText('Sampling soil moisture for 3 seconds...');
+
     try {
+      // Simulate 2.5 second sampling duration for realistic sensor reading
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
       const response = await fetch(`http://${connectedIp}/read_moisture`);
       const data = await response.json();
       if (data.status === 'success') {
-        setMoistureData({ percentage: data.moisture, level: data.level });
+        const percentage = Number(data.moisture);
+        const needsWatering = percentage < 35; // Under 35% means field needs irrigation
+        setMoistureData({ percentage, level: data.level, needsWatering });
+
+        // Sync reading with backend database so Home screen gets updated
+        try {
+          await fetch(`${API_BASE_URL}/save_moisture.php?field_id=1&moisture=${percentage}`);
+        } catch (err) {
+          console.error('Failed to sync moisture to backend', err);
+        }
       } else {
         Alert.alert('Error', 'Could not read soil moisture data from Rover.');
       }
@@ -108,6 +123,7 @@ export default function RoverScreen() {
       Alert.alert('Connection Error', 'Failed to reach Rover moisture sensor. Ensure sensor is wired to pin IO0.');
     } finally {
       setMoistureLoading(false);
+      setSamplingText('');
     }
   };
 
@@ -477,29 +493,38 @@ export default function RoverScreen() {
           {/* Soil Moisture Control & Telemetry Card */}
           <View style={styles.moistureCard}>
             <View style={styles.moistureHeaderRow}>
-              <Text style={styles.moistureTitle}>🌱 Soil Moisture</Text>
+              <Text style={styles.moistureTitle}>🌱 Soil Moisture Telemetry</Text>
               {moistureData && (
                 <View style={[
                   styles.moistureBadge,
-                  { backgroundColor: moistureData.level === 'dry' ? '#7f1d1d' : moistureData.level === 'optimal' ? '#064e3b' : '#1e3a8a' }
+                  { backgroundColor: moistureData.needsWatering ? '#7f1d1d' : '#064e3b' }
                 ]}>
                   <Text style={[
                     styles.moistureBadgeText,
-                    { color: moistureData.level === 'dry' ? '#f87171' : moistureData.level === 'optimal' ? '#34d399' : '#60a5fa' }
+                    { color: moistureData.needsWatering ? '#f87171' : '#34d399' }
                   ]}>
-                    {moistureData.level === 'dry' ? '🌵 DRY' : moistureData.level === 'optimal' ? '💧 OPTIMAL' : '🌊 SATURATED'}
+                    {moistureData.needsWatering ? '⚠️ WATERING NEEDED' : '✅ NO WATER NEEDED'}
                   </Text>
                 </View>
               )}
             </View>
 
-            {moistureData ? (
+            {moistureLoading ? (
+              <View style={styles.moistureGaugeContainer}>
+                <ActivityIndicator size="large" color="#10B981" />
+                <Text style={styles.samplingStatusText}>{samplingText}</Text>
+              </View>
+            ) : moistureData ? (
               <View style={styles.moistureGaugeContainer}>
                 <Text style={styles.moisturePercentText}>{moistureData.percentage}%</Text>
-                <Text style={styles.moistureSubtext}>Volumetric soil moisture level</Text>
+                <Text style={styles.moistureSubtext}>
+                  {moistureData.needsWatering 
+                    ? 'Soil is dry (under 35%). Field requires watering.' 
+                    : 'Soil moisture is optimal. Plot does not need watering.'}
+                </Text>
               </View>
             ) : (
-              <Text style={styles.moisturePlaceholderText}>No soil moisture reading taken yet.</Text>
+              <Text style={styles.moisturePlaceholderText}>Tap the button below to sample soil moisture for 3 seconds.</Text>
             )}
 
             <TouchableOpacity
@@ -508,11 +533,9 @@ export default function RoverScreen() {
               disabled={!connectedIp || moistureLoading}
               activeOpacity={0.8}
             >
-              {moistureLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.actionBtnText}>🧪 Measure Soil Moisture</Text>
-              )}
+              <Text style={styles.actionBtnText}>
+                {moistureLoading ? 'Sampling...' : '🧪 Check Soil Moisture'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -876,9 +899,16 @@ const styles = StyleSheet.create({
     color: '#34d399',
   },
   moistureSubtext: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#9CA3AF',
-    marginTop: 2,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  samplingStatusText: {
+    fontSize: 13,
+    color: '#10B981',
+    marginTop: 10,
+    fontWeight: '600',
   },
   moisturePlaceholderText: {
     fontSize: 13,

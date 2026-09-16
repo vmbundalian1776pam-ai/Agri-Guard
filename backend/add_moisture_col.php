@@ -1,0 +1,1 @@
+<?php require_once "db_connect.php"; $conn->query("ALTER TABLE fields ADD COLUMN IF NOT EXISTS latest_moisture DECIMAL(5,2) DEFAULT NULL, ADD COLUMN IF NOT EXISTS moisture_updated_at TIMESTAMP NULL DEFAULT NULL;"); echo "Done"; ?>
