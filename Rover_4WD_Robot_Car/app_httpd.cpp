@@ -620,6 +620,30 @@ static esp_err_t ledoff_handler(httpd_req_t *req){
     return httpd_resp_send(req, "OK", 2);
 }
 
+static esp_err_t moisture_handler(httpd_req_t *req){
+    // Read Analog Soil Moisture from IO0 (Pin 0)
+    // Calibration: Air dry = ~3200 ADC, Water = ~1400 ADC
+    int rawValue = analogRead(0);
+    
+    // Map raw ADC (3200 dry -> 1400 wet) to 0 - 100% moisture
+    int moisturePercent = map(rawValue, 3200, 1400, 0, 100);
+    if (moisturePercent < 0) moisturePercent = 0;
+    if (moisturePercent > 100) moisturePercent = 100;
+    
+    const char* level = "optimal";
+    if (moisturePercent < 30) level = "dry";
+    else if (moisturePercent > 75) level = "wet";
+
+    char json_response[128];
+    snprintf(json_response, sizeof(json_response), 
+        "{\"status\":\"success\",\"moisture\":%d,\"level\":\"%s\",\"raw\":%d}", 
+        moisturePercent, level, rawValue);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, json_response, strlen(json_response));
+}
+
 void startCameraServer(){
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -720,6 +744,14 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &ledon_uri);
         httpd_register_uri_handler(camera_httpd, &ledoff_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
+
+        httpd_uri_t moisture_uri = {
+            .uri       = "/read_moisture",
+            .method    = HTTP_GET,
+            .handler   = moisture_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(camera_httpd, &moisture_uri);
     }
 
     config.server_port += 1;

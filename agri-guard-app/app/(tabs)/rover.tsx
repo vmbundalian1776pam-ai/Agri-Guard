@@ -86,6 +86,31 @@ export default function RoverScreen() {
   const patrolActiveRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
 
+  // Soil Moisture State
+  const [moistureData, setMoistureData] = useState<{ percentage: number; level: string } | null>(null);
+  const [moistureLoading, setMoistureLoading] = useState(false);
+
+  const measureSoilMoisture = async () => {
+    if (!connectedIp) {
+      Alert.alert('Not Connected', 'Please connect to a Rover IP first.');
+      return;
+    }
+    setMoistureLoading(true);
+    try {
+      const response = await fetch(`http://${connectedIp}/read_moisture`);
+      const data = await response.json();
+      if (data.status === 'success') {
+        setMoistureData({ percentage: data.moisture, level: data.level });
+      } else {
+        Alert.alert('Error', 'Could not read soil moisture data from Rover.');
+      }
+    } catch (e) {
+      Alert.alert('Connection Error', 'Failed to reach Rover moisture sensor. Ensure sensor is wired to pin IO0.');
+    } finally {
+      setMoistureLoading(false);
+    }
+  };
+
   // Saved IPs
   const [savedIps, setSavedIps] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -448,6 +473,48 @@ export default function RoverScreen() {
           {isPatrolling && patrolStep ? (
             <Text style={styles.patrolStatus}>{patrolStep}</Text>
           ) : null}
+
+          {/* Soil Moisture Control & Telemetry Card */}
+          <View style={styles.moistureCard}>
+            <View style={styles.moistureHeaderRow}>
+              <Text style={styles.moistureTitle}>🌱 Soil Moisture</Text>
+              {moistureData && (
+                <View style={[
+                  styles.moistureBadge,
+                  { backgroundColor: moistureData.level === 'dry' ? '#7f1d1d' : moistureData.level === 'optimal' ? '#064e3b' : '#1e3a8a' }
+                ]}>
+                  <Text style={[
+                    styles.moistureBadgeText,
+                    { color: moistureData.level === 'dry' ? '#f87171' : moistureData.level === 'optimal' ? '#34d399' : '#60a5fa' }
+                  ]}>
+                    {moistureData.level === 'dry' ? '🌵 DRY' : moistureData.level === 'optimal' ? '💧 OPTIMAL' : '🌊 SATURATED'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {moistureData ? (
+              <View style={styles.moistureGaugeContainer}>
+                <Text style={styles.moisturePercentText}>{moistureData.percentage}%</Text>
+                <Text style={styles.moistureSubtext}>Volumetric soil moisture level</Text>
+              </View>
+            ) : (
+              <Text style={styles.moisturePlaceholderText}>No soil moisture reading taken yet.</Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.moistureBtn, { backgroundColor: !connectedIp ? '#333' : '#10B981' }]}
+              onPress={measureSoilMoisture}
+              disabled={!connectedIp || moistureLoading}
+              activeOpacity={0.8}
+            >
+              {moistureLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.actionBtnText}>🧪 Measure Soil Moisture</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Scan Result Modal */}
@@ -768,5 +835,62 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  moistureCard: {
+    width: '100%',
+    backgroundColor: '#1e1e1e',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  moistureHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  moistureTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#f1f1f1',
+  },
+  moistureBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moistureBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  moistureGaugeContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  moisturePercentText: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#34d399',
+  },
+  moistureSubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  moisturePlaceholderText: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginVertical: 14,
+  },
+  moistureBtn: {
+    width: '100%',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
   },
 });
