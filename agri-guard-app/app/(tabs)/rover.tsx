@@ -100,15 +100,40 @@ export default function RoverScreen() {
           console.error('Failed to sync moisture to backend', err);
         }
 
-        // Display test result popup (raw ADC shown for calibration diagnostics)
-        Alert.alert(
-          '🌱 Soil Moisture Test Result',
-          `Moisture Level: ${percentage}%\nRaw ADC: ${rawAdc}\nStatus: ${needsWatering ? '⚠️ WATERING NEEDED' : '✅ SOIL MOIST / NO WATER NEEDED'}\n\n${
-            needsWatering
-              ? 'The plot is dry (under 35%). Please start irrigation on the Home screen.'
-              : 'Soil moisture is optimal. Irrigation is not required.'
-          }`
-        );
+        // Auto Watering Trigger
+        if (needsWatering) {
+          try {
+            const WATER_SYSTEM_IP = 'http://192.168.100.225';
+            const waterRes = await fetch(`${WATER_SYSTEM_IP}/water_on`);
+            if (waterRes.ok) {
+              Alert.alert(
+                '🌱 Auto-Watering Activated', 
+                `Soil moisture is extremely low (${percentage}%).\n\nThe watering system has been automatically started and will run for 10 seconds.`
+              );
+              
+              // 10 second auto shut-off
+              setTimeout(async () => {
+                try {
+                  await fetch(`${WATER_SYSTEM_IP}/water_off`);
+                  console.log("Watering system auto-stopped after 10 seconds.");
+                } catch (e) {
+                  console.error("Failed to turn off water", e);
+                }
+              }, 10000);
+
+            } else {
+              Alert.alert('⚠️ Auto-Watering Failed', `Soil moisture is low (${percentage}%), but the watering system returned an error.`);
+            }
+          } catch (err) {
+            Alert.alert('⚠️ Auto-Watering Failed', `Soil moisture is low (${percentage}%), but could not connect to watering system at 192.168.100.225.`);
+          }
+        } else {
+          // Display normal test result popup if no watering is needed
+          Alert.alert(
+            '🌱 Soil Moisture Test Result',
+            `Moisture Level: ${percentage}%\nRaw ADC: ${rawAdc}\nStatus: ✅ SOIL MOIST\n\nSoil moisture is optimal. Irrigation is not required.`
+          );
+        }
       } else {
         Alert.alert('Error', 'Could not read soil moisture data from Rover.');
       }
