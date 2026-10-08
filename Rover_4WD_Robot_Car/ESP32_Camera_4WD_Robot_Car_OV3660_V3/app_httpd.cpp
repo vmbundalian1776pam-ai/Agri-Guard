@@ -638,6 +638,32 @@ static esp_err_t ledoff_handler(httpd_req_t *req){
     return httpd_resp_send(req, "OK", 2);
 }
 
+
+static esp_err_t distance_handler(httpd_req_t *req){
+    Serial1.println("READ_DISTANCE");
+    int distance = 999;
+    
+    unsigned long startTime = millis();
+    while(millis() - startTime < 2000) {
+        if (Serial1.available() > 0) {
+            String resp = Serial1.readStringUntil('\n');
+            resp.trim();
+            if (resp.length() > 0) {
+                distance = resp.toInt();
+            }
+            break;
+        }
+        delay(50);
+    }
+    
+    char jsonResponse[64];
+    snprintf(jsonResponse, sizeof(jsonResponse), "{\"status\":\"success\", \"distance\":%d}", distance);
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, jsonResponse, strlen(jsonResponse));
+}
+
 static esp_err_t tilt_handler(httpd_req_t *req){
     char buf[32];
     int angle = 45;
@@ -796,6 +822,12 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
+    httpd_uri_t distance_uri = {
+        .uri       = "/read_distance",
+        .method    = HTTP_GET,
+        .handler   = distance_handler,
+        .user_ctx  = NULL
+    };
     httpd_uri_t tilt_uri = {
         .uri       = "/tilt",
         .method    = HTTP_GET,
@@ -825,6 +857,7 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &capture_uri);
         httpd_register_uri_handler(camera_httpd, &moisture_uri);
         httpd_register_uri_handler(camera_httpd, &tilt_uri);
+        httpd_register_uri_handler(camera_httpd, &distance_uri);
     }
 
     config.server_port += 1;

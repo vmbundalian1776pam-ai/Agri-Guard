@@ -91,6 +91,10 @@ def query(sql, params=None, fetchone=False, fetchall=False, commit=False):
 
 
 def init_db():
+    try:
+        query("ALTER TABLE fields ADD COLUMN latest_temperature REAL;", commit=True)
+    except Exception:
+        pass
     """Create all tables and seed initial data."""
     if DATABASE_URL:
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
@@ -102,6 +106,7 @@ def init_db():
                 location            TEXT,
                 status              TEXT    DEFAULT 'unknown',
                 latest_moisture     REAL,
+                latest_temperature  REAL,
                 moisture_updated_at TEXT,
                 created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
@@ -149,6 +154,7 @@ def init_db():
                 location            TEXT,
                 status              TEXT    DEFAULT "unknown",
                 latest_moisture     REAL,
+                latest_temperature  REAL,
                 moisture_updated_at TEXT,
                 created_at          TEXT    DEFAULT CURRENT_TIMESTAMP
             );
@@ -333,13 +339,19 @@ def get_field_status():
 def save_moisture():
     field_id = request.values.get('field_id', 1, type=int)
     moisture = request.values.get('moisture', type=float)
+    temperature = request.values.get('temperature', type=float)
     if moisture is None:
         return jsonify({"status": "error", "message": "moisture value is required"})
 
     now = datetime.utcnow().isoformat()
-    query("UPDATE fields SET latest_moisture = ?, moisture_updated_at = ? WHERE id = ?",
-          (moisture, now, field_id), commit=True)
-    return jsonify({"status": "success", "moisture": moisture})
+    if temperature is not None:
+        query("UPDATE fields SET latest_moisture = ?, latest_temperature = ?, moisture_updated_at = ? WHERE id = ?",
+              (moisture, temperature, now, field_id), commit=True)
+        return jsonify({"status": "success", "moisture": moisture, "temperature": temperature})
+    else:
+        query("UPDATE fields SET latest_moisture = ?, moisture_updated_at = ? WHERE id = ?",
+              (moisture, now, field_id), commit=True)
+        return jsonify({"status": "success", "moisture": moisture})
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Routes — Farmers
