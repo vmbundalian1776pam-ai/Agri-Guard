@@ -59,7 +59,7 @@ export default function TabLayout() {
         name="admin"
         options={{
           title: 'Admin',
-          href: user?.role === 'owner' ? '/admin' : null,
+          href: null, // Hidden per user request
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="shield.fill" color={color} />, // using shield for admin
         }}
       />

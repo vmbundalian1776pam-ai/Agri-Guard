@@ -438,7 +438,7 @@ export default function RoverScreen() {
         </View>
 
         {/* Action Controls & D-Pad */}
-        <View style={styles.controls}>
+        <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: 40, alignItems: "center"}}>
           {/* Forward */}
           <View style={styles.row}>
             <TouchableOpacity
@@ -585,7 +585,7 @@ export default function RoverScreen() {
           {isPatrolling && patrolStep ? (
             <Text style={styles.patrolStatus}>{patrolStep}</Text>
           ) : null}
-        </View>
+        </ScrollView>
 
         {/* Scan Result Modal */}
         <Modal

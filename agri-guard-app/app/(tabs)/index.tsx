@@ -133,6 +133,12 @@ export default function DashboardScreen() {
     }
   };
 
+  const getImageUri = (path: string) => {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    return `${API_BASE_URL}/${path}`;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -268,7 +274,7 @@ export default function DashboardScreen() {
           <Text style={styles.sectionTitle}>📋 Latest Diagnosis</Text>
           <View style={styles.diagnosisInfoRow}>
             <Image
-              source={{ uri: `${API_BASE_URL}/${latestScan.image_path}` }}
+              source={{ uri: getImageUri(latestScan.image_path) }}
               style={styles.diagnosisImage}
             />
             <View style={styles.diagnosisTextContainer}>
@@ -348,7 +354,7 @@ export default function DashboardScreen() {
             activeOpacity={0.75}
           >
             <Image
-              source={{ uri: `${API_BASE_URL}/${item.image_path}` }}
+              source={{ uri: getImageUri(item.image_path) }}
               style={styles.historyThumbnail}
             />
             <View style={styles.historyInfo}>
@@ -392,7 +398,7 @@ export default function DashboardScreen() {
             <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
               {/* Large Image */}
               <Image
-                source={{ uri: `${API_BASE_URL}/${selectedScan.image_path}` }}
+                source={{ uri: getImageUri(selectedScan.image_path) }}
                 style={styles.modalImage}
                 resizeMode="cover"
               />
