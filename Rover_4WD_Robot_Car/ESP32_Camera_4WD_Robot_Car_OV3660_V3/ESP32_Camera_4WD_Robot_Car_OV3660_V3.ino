@@ -127,8 +127,8 @@ void setup() {
   // Serial.println("' to connect");
   
   // Connect to your existing Hotspot instead of making a new one!
-  const char* mySSID = "HUAWEI-2.4G-b6Ht"; // <-- CHANGE THIS
-  const char* myPASS = "HpzB6x9Z"; // <-- CHANGE THIS
+  const char* mySSID = "Paskkal"; // <-- CHANGE THIS
+  const char* myPASS = "0123456789"; // <-- CHANGE THIS
   Serial.print("Connecting to WiFi");
   WiFi.begin(mySSID, myPASS);
   while (WiFi.status() != WL_CONNECTED) {

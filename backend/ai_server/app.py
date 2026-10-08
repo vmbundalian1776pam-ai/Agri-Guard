@@ -14,6 +14,11 @@ from tensorflow.keras.models import load_model
 app = Flask(__name__)
 CORS(app)
 
+SUPABASE_URL = "https://bvczwcpjjcwymgkwywgb.supabase.co"
+SUPABASE_KEY = "sb_publishable_ETOMeJANE6gfsixt98nuRg_WYVZL3pQ"
+
+import requests
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -397,6 +402,26 @@ def audit_log():
     query("INSERT INTO audit_logs (user_id, action) VALUES (?, ?)", (user_id, action), commit=True)
     return jsonify({"status": "success"})
 
+
+@app.route('/change_username.php', methods=['POST'])
+def change_username():
+    user_id = request.form.get('user_id', type=int)
+    new_username = request.form.get('new_username', '').strip()
+    
+    if not user_id or not new_username:
+        return jsonify({"status": "error", "message": "Missing parameters"})
+        
+    try:
+        # Check if username exists
+        existing = query("SELECT id FROM users WHERE username = ?", (new_username,), fetchone=True)
+        if existing and existing['id'] != user_id:
+            return jsonify({"status": "error", "message": "Username already taken"})
+            
+        query("UPDATE users SET username = ? WHERE id = ?", (new_username, user_id), commit=True)
+        return jsonify({"status": "success", "new_username": new_username})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 @app.route('/get_audit_logs.php')
 def get_audit_logs():
     user_id = request.args.get('user_id', type=int)
@@ -440,8 +465,36 @@ def upload_image():
     field_status   = result.get('status', 'unknown')
     confidence_pct = round(confidence * 100, 2) if 0 < confidence <= 1.0 else round(confidence, 2)
 
+    # Upload to Supabase Storage
+    public_url = filepath
+    if DATABASE_URL:
+        try:
+            timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            safe_name = secure_filename(f"{timestamp}_{file.filename}")
+            
+            with open(filepath, 'rb') as f_in:
+                res = requests.post(
+                    f"{SUPABASE_URL}/storage/v1/object/scans/{safe_name}",
+                    headers={
+                        "Authorization": f"Bearer {SUPABASE_KEY}",
+                        "apikey": SUPABASE_KEY,
+                        "Content-Type": file.content_type or "image/jpeg"
+                    },
+                    data=f_in
+                )
+            if res.status_code in (200, 201):
+                public_url = f"{SUPABASE_URL}/storage/v1/object/public/scans/{safe_name}"
+        except Exception as e:
+            print("Supabase upload failed:", e)
+
     query("INSERT INTO scans (field_id, image_path, result_disease, confidence, recommendation) VALUES (?, ?, ?, ?, ?)",
-          (field_id, filepath, disease, confidence_pct, recommendation), commit=True)
+          (field_id, public_url, disease, confidence_pct, recommendation), commit=True)
+          
+    # Clean up local file so Render disk doesn't fill up
+    try:
+        os.remove(filepath)
+    except:
+        pass
     if field_status != 'unknown':
         query("UPDATE fields SET status = ? WHERE id = ?", (field_status, field_id), commit=True)
 

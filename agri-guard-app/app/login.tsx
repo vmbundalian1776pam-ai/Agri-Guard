@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/config';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -7,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
@@ -64,14 +66,19 @@ export default function LoginScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              placeholderTextColor="#888"
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                placeholderTextColor="#888"
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={24} color="#888" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity 
@@ -143,6 +150,23 @@ const styles = StyleSheet.create({
     color: '#aaa',
     marginBottom: 8,
     fontSize: 14,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    color: '#fff',
+    padding: 15,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
   },
   input: {
     backgroundColor: '#2a2a2a',
