@@ -344,6 +344,7 @@ export default function RoverScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={{paddingBottom: 40}} showsVerticalScrollIndicator={true}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>🤖 Rover Control</Text>
@@ -439,7 +440,7 @@ export default function RoverScreen() {
         </View>
 
         {/* Action Controls & D-Pad */}
-        <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: 40, alignItems: "center"}}>
+        <View style={styles.controls}>
           {/* Forward */}
           <View style={styles.row}>
             <TouchableOpacity
@@ -586,6 +587,7 @@ export default function RoverScreen() {
           {isPatrolling && patrolStep ? (
             <Text style={styles.patrolStatus}>{patrolStep}</Text>
           ) : null}
+        </View>
         </ScrollView>
 
         {/* Scan Result Modal */}
@@ -602,7 +604,7 @@ export default function RoverScreen() {
               {scanResult && (
                 <View style={styles.modalContent}>
                   <Image
-                    source={{ uri: `${API_BASE_URL}/${scanResult.image_url}` }}
+                    source={{ uri: scanResult.image_url.startsWith('http') ? scanResult.image_url : `${API_BASE_URL}/${scanResult.image_url}` }}
                     style={styles.modalImage}
                   />
                   <Text style={styles.modalDisease}>{scanResult.disease}</Text>

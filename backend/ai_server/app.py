@@ -473,17 +473,23 @@ def upload_image():
             safe_name = secure_filename(f"{timestamp}_{file.filename}")
             
             with open(filepath, 'rb') as f_in:
-                res = requests.post(
-                    f"{SUPABASE_URL}/storage/v1/object/scans/{safe_name}",
-                    headers={
-                        "Authorization": f"Bearer {SUPABASE_KEY}",
-                        "apikey": SUPABASE_KEY,
-                        "Content-Type": file.content_type or "image/jpeg"
-                    },
-                    data=f_in
-                )
+                file_bytes = f_in.read()
+            
+            res = requests.post(
+                f"{SUPABASE_URL}/storage/v1/object/scans/{safe_name}",
+                headers={
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "apikey": SUPABASE_KEY,
+                    "Content-Type": file.content_type or "image/jpeg"
+                },
+                data=file_bytes
+            )
+            print(f"Supabase upload response: {res.status_code} {res.text[:200]}")
             if res.status_code in (200, 201):
                 public_url = f"{SUPABASE_URL}/storage/v1/object/public/scans/{safe_name}"
+                print(f"Image saved to Supabase: {public_url}")
+            else:
+                print(f"Supabase upload failed with status {res.status_code}")
         except Exception as e:
             print("Supabase upload failed:", e)
 
@@ -501,7 +507,7 @@ def upload_image():
     return jsonify({"status": "success", "message": "Rover image scanned successfully",
                     "data": {"disease": disease, "confidence": confidence_pct,
                              "recommendation": recommendation,
-                             "field_status": field_status, "image_url": filepath}})
+                             "field_status": field_status, "image_url": public_url}})
 
 @app.route('/predict', methods=['POST'])
 def predict():
