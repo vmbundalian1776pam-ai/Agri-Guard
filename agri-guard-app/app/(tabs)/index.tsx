@@ -209,10 +209,17 @@ export default function DashboardScreen() {
         {/* Soil Moisture Telemetry */}
         <View style={styles.homeMoistureRow}>
           <View style={styles.homeMoistureInfo}>
-            <Text style={styles.homeMoistureLabel}>Latest Soil Moisture</Text>
+            <Text style={styles.homeMoistureLabel}>Latest Soil & Temp</Text>
             {fieldData?.latest_moisture !== undefined && fieldData?.latest_moisture !== null ? (
               <View style={styles.homeMoistureValRow}>
-                <Text style={styles.homeMoistureValue}>{Number(fieldData.latest_moisture)}%</Text>
+                <View style={{alignItems: 'center'}}>
+                  <Text style={styles.homeMoistureValue}>{Number(fieldData.latest_moisture)}%</Text>
+                  <Text style={{color: '#666', fontSize: 12}}>Moisture</Text>
+                </View>
+                <View style={{alignItems: 'center', marginLeft: 20}}>
+                  <Text style={[styles.homeMoistureValue, {color: '#e74c3c'}]}>{fieldData.latest_temperature ? Number(fieldData.latest_temperature) + '°C' : '--°C'}</Text>
+                  <Text style={{color: '#666', fontSize: 12}}>Temp</Text>
+                </View>
                 <View style={[
                   styles.homeMoistureBadge,
                   { backgroundColor: Number(fieldData.latest_moisture) < 35 ? '#7f1d1d' : '#064e3b' }
