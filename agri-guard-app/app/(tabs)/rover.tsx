@@ -16,7 +16,6 @@ import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { API_BASE_URL } from '../../config';
-import { WebView } from 'react-native-webview';
 
 const getStreamHtml = (ip: string) => `
 <!DOCTYPE html>
