@@ -29,6 +29,16 @@ void robot_left();
 void robot_right();
 volatile unsigned long previous_time = 0;
 volatile unsigned long move_interval = 250;
+volatile unsigned long last_cmd_time = 0;
+volatile bool is_moving = false;
+
+void check_motor_safety() {
+    if (is_moving && !noStop && (millis() - last_cmd_time > 600)) {
+        robot_stop();
+        is_moving = false;
+        Serial.println("Auto-safety stop triggered");
+    }
+}
 unsigned int get_speed(unsigned int sp)
 {
   return map(sp, 0, 100, 0, 255);
@@ -570,38 +580,46 @@ page +="</div>";
 
 
 static esp_err_t go_handler(httpd_req_t *req){
-    //WheelAct(HIGH, LOW, HIGH, LOW);
-    robot_fwd();
+    check_motor_safety();
+    robot_right();
+    last_cmd_time = millis();
+    is_moving = true;
     Serial.println("Go");
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, "OK", 2);
 }
 static esp_err_t back_handler(httpd_req_t *req){
-    //WheelAct(LOW, HIGH, LOW, HIGH);
-    robot_back();
+    check_motor_safety();
+    robot_left();
+    last_cmd_time = millis();
+    is_moving = true;
     Serial.println("Back");
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, "OK", 2);
 }
 
 static esp_err_t left_handler(httpd_req_t *req){
-    //WheelAct(HIGH, LOW, LOW, HIGH);
-    robot_left();
+    check_motor_safety();
+    robot_fwd();
+    last_cmd_time = millis();
+    is_moving = true;
     Serial.println("Left");
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, "OK", 2);
 }
 static esp_err_t right_handler(httpd_req_t *req){
-    //WheelAct(LOW, HIGH, HIGH, LOW);
-    robot_right();
+    check_motor_safety();
+    robot_back();
+    last_cmd_time = millis();
+    is_moving = true;
     Serial.println("Right");
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, "OK", 2);
 }
 
 static esp_err_t stop_handler(httpd_req_t *req){
-    //WheelAct(LOW, LOW, LOW, LOW);
     robot_stop();
+    is_moving = false;
     Serial.println("Stop");
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, "OK", 2);
@@ -620,19 +638,62 @@ static esp_err_t ledoff_handler(httpd_req_t *req){
     return httpd_resp_send(req, "OK", 2);
 }
 
+static esp_err_t tilt_handler(httpd_req_t *req){
+    char buf[32];
+    int angle = 45;
+    if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
+        char param[16];
+        if (httpd_query_key_value(buf, "angle", param, sizeof(param)) == ESP_OK) {
+            angle = atoi(param);
+        }
+    }
+    // Send command to Arduino Uno via GPIO16 (SoftwareSerial RX on Uno Pin 3)
+    Serial1.printf("TILT:%d\n", angle);
+    Serial.printf("[Servo] Tilt angle: %d\n", angle);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, "{\"status\":\"success\"}", 20);
+}
+
 static esp_err_t moisture_handler(httpd_req_t *req){
-    // Read Analog Soil Moisture from IO0 (Pin 0)
-    // Calibration: Air dry = ~3200 ADC, Water = ~1400 ADC
-    int rawValue = analogRead(0);
+    // Send READ_MOISTURE command to Arduino Uno
+    Serial1.println("READ_MOISTURE");
     
-    // Map raw ADC (3200 dry -> 1400 wet) to 0 - 100% moisture
-    int moisturePercent = map(rawValue, 3200, 1400, 0, 100);
+    int rawValue = 650; // default
+    
+    // Wait for Arduino to physically move the arm and read the sensor (up to 5 seconds)
+    unsigned long startTime = millis();
+    bool received = false;
+    while(millis() - startTime < 5000) {
+        if (Serial1.available() > 0) {
+            String resp = Serial1.readStringUntil('\n');
+            resp.trim();
+            if (resp.length() > 0) {
+                rawValue = resp.toInt();
+                received = true;
+            }
+            break;
+        }
+        delay(50);
+    }
+
+    if (!received) {
+        Serial.println("[Moisture] Timeout waiting for Arduino");
+    }
+
+    const int DRY_ADC = 410;  // Arduino 10-bit ADC dry air
+    const int WET_ADC = 135;  // Arduino 10-bit ADC in water
+
+    if (rawValue >= 1020) rawValue = DRY_ADC;
+
+    int moisturePercent = map(rawValue, DRY_ADC, WET_ADC, 0, 100);
     if (moisturePercent < 0) moisturePercent = 0;
     if (moisturePercent > 100) moisturePercent = 100;
     
     const char* level = "optimal";
     if (moisturePercent < 30) level = "dry";
-    else if (moisturePercent > 75) level = "wet";
+    else if (moisturePercent > 70) level = "wet";
 
     char json_response[128];
     snprintf(json_response, sizeof(json_response), 
@@ -645,7 +706,11 @@ static esp_err_t moisture_handler(httpd_req_t *req){
 }
 
 void startCameraServer(){
+    // Initialize Serial1 for Arduino Uno communication (TX on GPIO2, RX on GPIO3)
+    Serial1.begin(9600, SERIAL_8N1, 3, 2);
+    
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 16;
 
     httpd_uri_t go_uri = {
         .uri       = "/go",
@@ -724,6 +789,20 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
+    httpd_uri_t moisture_uri = {
+        .uri       = "/read_moisture",
+        .method    = HTTP_GET,
+        .handler   = moisture_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t tilt_uri = {
+        .uri       = "/tilt",
+        .method    = HTTP_GET,
+        .handler   = tilt_handler,
+        .user_ctx  = NULL
+    };
+
    httpd_uri_t stream_uri = {
         .uri       = "/stream",
         .method    = HTTP_GET,
@@ -744,14 +823,8 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &ledon_uri);
         httpd_register_uri_handler(camera_httpd, &ledoff_uri);
         httpd_register_uri_handler(camera_httpd, &capture_uri);
-
-        httpd_uri_t moisture_uri = {
-            .uri       = "/read_moisture",
-            .method    = HTTP_GET,
-            .handler   = moisture_handler,
-            .user_ctx  = NULL
-        };
         httpd_register_uri_handler(camera_httpd, &moisture_uri);
+        httpd_register_uri_handler(camera_httpd, &tilt_uri);
     }
 
     config.server_port += 1;

@@ -28,8 +28,8 @@ $filename = uniqid() . '.' . $file_extension;
 $target_file = $upload_dir . $filename;
 
 if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
-    // Call LOCAL Python AI Server
-    $api_url = "http://127.0.0.1:5000/predict";
+    // Call Live Python AI Server on Render
+    $api_url = "https://agriguard-ai-server.onrender.com/predict";
     
     // Create a CURLFile object
     $cfile = new CURLFile($target_file, mime_content_type($target_file), basename($target_file));

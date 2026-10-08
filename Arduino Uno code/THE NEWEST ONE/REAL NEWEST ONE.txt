@@ -1,0 +1,110 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// Serial link: ESP32-CAM TX(IO2) -> Uno RX(3) | ESP32-CAM RX(IO4) -> Uno TX(4)
+SoftwareSerial espSerial(3, 4);
+
+Servo tiltServo;
+Servo burrowServo;
+
+// Pins
+const int TEMP_PIN      = 2;
+const int TILT_PIN      = 9;
+const int BURROW_PIN    = 10;
+const int MOISTURE_PIN  = A0;
+const int TRIG_PIN      = 6;
+const int ECHO_PIN      = 7;
+
+// Temp Sensor Setup
+OneWire oneWire(TEMP_PIN);
+DallasTemperature tempSensor(&oneWire);
+
+// moveServo: Attach -> Write -> Detach to eliminate buzzing
+void moveServo(Servo &servo, int pin, int angle, int holdMs = 600) {
+  angle = constrain(angle, 0, 180);
+  servo.attach(pin);
+  servo.write(angle);
+  delay(holdMs);
+  servo.detach();
+}
+
+void setup() {
+  Serial.begin(115200);
+  espSerial.begin(9600);
+
+  // Ultrasonic setup
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // Temp sensor init
+  tempSensor.begin();
+
+  delay(1500); // Let power stabilize
+
+  // Lock tilt servo (do not move on startup)
+  pinMode(TILT_PIN, OUTPUT);
+  digitalWrite(TILT_PIN, LOW);
+
+  // Retract burrow arm safely
+  moveServo(burrowServo, BURROW_PIN, 10, 800);
+
+  Serial.println("Agri-Guard Arduino: All Sensors Ready!");
+}
+
+void loop() {
+  if (espSerial.available() > 0) {
+    String command = espSerial.readStringUntil('\n');
+    command.trim();
+
+    Serial.print("[CMD Received] ");
+    Serial.println(command);
+
+    // ── 1. SOIL MOISTURE ─────────────────────────────────────
+    if (command == "READ_MOISTURE") {
+      moveServo(burrowServo, BURROW_PIN, 100, 1500); // Arm DOWN
+      delay(1000); // Let sensor settle
+
+      long total = 0;
+      for (int i = 0; i < 5; i++) {
+        total += analogRead(MOISTURE_PIN);
+        delay(50);
+      }
+      int rawVal = (int)(total / 5);
+
+      moveServo(burrowServo, BURROW_PIN, 10, 1500); // Arm UP
+      
+      espSerial.println(rawVal); // Send data back to ESP32
+    }
+
+    // ── 2. CAMERA TILT ───────────────────────────────────────
+    else if (command.startsWith("TILT:")) {
+      int angle = command.substring(5).toInt();
+      moveServo(tiltServo, TILT_PIN, angle, 600);
+    }
+
+    // ── 3. TEMPERATURE ───────────────────────────────────────
+    else if (command == "READ_TEMP") {
+      tempSensor.requestTemperatures();
+      float tempC = tempSensor.getTempCByIndex(0);
+      espSerial.println(tempC); // Send back to ESP32
+    }
+
+    // ── 4. ULTRASONIC DISTANCE ───────────────────────────────
+    else if (command == "READ_DISTANCE") {
+      digitalWrite(TRIG_PIN, LOW);
+      delayMicroseconds(2);
+      digitalWrite(TRIG_PIN, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(TRIG_PIN, LOW);
+
+      long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
+      int distance = duration * 0.034 / 2;
+      
+      if (distance == 0) distance = 999; // Error/Out of range
+      
+      espSerial.println(distance); // Send back to ESP32
+    }
+  }
+}

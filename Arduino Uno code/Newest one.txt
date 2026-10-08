@@ -1,0 +1,57 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial espSerial(3, 4);
+
+Servo tiltServo;
+Servo burrowServo;
+
+const int TILT_PIN      = 9;
+const int BURROW_PIN    = 10;
+const int MOISTURE_PIN  = A0;
+
+void moveServo(Servo &servo, int pin, int angle, int holdMs = 600) {
+  angle = constrain(angle, 0, 180);
+  servo.attach(pin);
+  servo.write(angle);
+  delay(holdMs);
+  servo.detach();   // ← This stops the grinding buzz!
+}
+
+void setup() {
+  Serial.begin(115200);
+  espSerial.begin(9600);
+
+  delay(1500);   // ← Wait for power to stabilize before touching servos
+
+  pinMode(TILT_PIN, OUTPUT);
+  digitalWrite(TILT_PIN, LOW);
+
+  moveServo(burrowServo, BURROW_PIN, 10, 800); // Probe arm UP
+
+  Serial.println("Agri-Guard Arduino Ready!");
+}
+
+void loop() {
+  if (espSerial.available() > 0) {
+    String command = espSerial.readStringUntil('\n');
+    command.trim();
+
+    if (command == "READ_MOISTURE") {
+      moveServo(burrowServo, BURROW_PIN, 100, 1500);
+      delay(1000);
+      long total = 0;
+      for (int i = 0; i < 5; i++) {
+        total += analogRead(MOISTURE_PIN);
+        delay(50);
+      }
+      int rawVal = (int)(total / 5);
+      moveServo(burrowServo, BURROW_PIN, 10, 1500);
+      espSerial.println(rawVal);
+    }
+    else if (command.startsWith("TILT:")) {
+      int angle = command.substring(5).toInt();
+      moveServo(tiltServo, TILT_PIN, angle, 600);
+    }
+  }
+}

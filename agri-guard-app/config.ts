@@ -1,24 +1,16 @@
 import { Platform } from 'react-native';
 
-const LOCAL_IP = '192.168.100.15';
+// 🌐 The live Render server — handles all API calls AND the AI model
+const PRODUCTION_BACKEND = 'https://agriguard-ai-server.onrender.com';
 
 function resolveApiBaseUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    
-    // GitHub Codespaces pattern (e.g., app-name-8081.app.github.dev -> app-name-8000.app.github.dev)
-    if (hostname.includes('github.dev') || hostname.includes('githubpreview.dev')) {
-      const backendHostname = hostname.replace(/-\d+\./, '-8000.');
-      return `${window.location.protocol}//${backendHostname}`;
-    }
-    
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8000';
+      return 'http://localhost:5000';
     }
   }
-  
-  return `http://${LOCAL_IP}/Agri-Guard/backend`;
+  return PRODUCTION_BACKEND;
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
-

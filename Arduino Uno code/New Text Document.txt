@@ -1,0 +1,42 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+// Serial link from ESP32-CAM (GPIO16 -> Arduino Pin 3 RX)
+SoftwareSerial espSerial(3, 4); // RX=3, TX=4
+Servo tiltServo;   // Camera Tilt Servo (Pin 9)
+Servo burrowServo; // Soil Probe Servo (Pin 10)
+const int MOISTURE_PIN = A0;
+void setup() {
+  Serial.begin(115200);
+  espSerial.begin(9600);
+  tiltServo.attach(9);
+  burrowServo.attach(10);
+  // Default starting positions
+  tiltServo.write(45);  // Level camera
+  burrowServo.write(10); // Retract probe arm UP
+  Serial.println("Arduino Uno Servo & Sensor Hub Ready!");
+}
+void loop() {
+  if (espSerial.available() > 0) {
+    String command = espSerial.readStringUntil('\n');
+    command.trim();
+    Serial.print("Received from ESP32: ");
+    Serial.println(command);
+    if (command == "READ_MOISTURE") {
+      // 1. Swing burrow arm DOWN into soil
+      burrowServo.write(100); 
+      delay(2000); // Wait for arm to plunge
+      // 2. Read moisture on A0
+      int rawVal = analogRead(MOISTURE_PIN);
+      
+      // 3. Lift arm back UP
+      burrowServo.write(10); 
+      
+      // 4. Reply to ESP32
+      espSerial.println(rawVal);
+    }
+    else if (command.startsWith("TILT:")) {
+      int angle = command.substring(5).toInt();
+      tiltServo.write(angle);
+    }
+  }
+}

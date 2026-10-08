@@ -95,8 +95,8 @@ if (!file_put_contents($target_file, $img_data)) {
 // We always scan for the single Eggplant Field (field_id = 1)
 $field_id = 1;
 
-// 3. Call local Python AI server for plant disease prediction
-$api_url = "http://127.0.0.1:5000/predict";
+// 3. Call Live Python AI server on Render for plant disease prediction
+$api_url = "https://agriguard-ai-server.onrender.com/predict";
 $cfile = new CURLFile($target_file, 'image/jpeg', basename($target_file));
 $post_data = array('image' => $cfile);
 

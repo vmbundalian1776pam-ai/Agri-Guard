@@ -16,9 +16,8 @@ import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { API_BASE_URL } from '../../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WebView } from 'react-native-webview';
 
-// Load the MJPEG stream in an HTML page with auto-refresh fallback
 const getStreamHtml = (ip: string) => `
 <!DOCTYPE html>
 <html>
@@ -36,35 +35,14 @@ const getStreamHtml = (ip: string) => `
       overflow: hidden;
     }
     img { width: 100%; height: 100%; object-fit: contain; }
-    #status {
-      display: none;
-      color: #888;
-      font-family: sans-serif;
-      font-size: 13px;
-      text-align: center;
-      padding: 20px;
-      position: absolute;
-    }
   </style>
 </head>
 <body>
-  <img id="s" src="http://${ip}:81/stream" />
-  <div id="status">Connecting to stream...</div>
-  <script>
-    var img = document.getElementById('s');
-    var status = document.getElementById('status');
-    status.style.display = 'block';
-    img.onload = function() { status.style.display = 'none'; };
-    img.onerror = function() {
-      status.innerText = 'Stream error. Retrying...';
-      setTimeout(function() {
-        img.src = 'http://${ip}:81/stream?' + Date.now();
-      }, 3000);
-    };
-  </script>
+  <img id="s" src="http://${ip}:81/stream" onerror="setTimeout(() => { this.src='http://${ip}:81/stream?'+Date.now() }, 3000);" />
 </body>
 </html>
 `;
+
 
 interface ScanResult {
   disease: string;
@@ -86,10 +64,15 @@ export default function RoverScreen() {
   const patrolActiveRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
 
+  // Patrol Settings State
+  const [showPatrolSettings, setShowPatrolSettings] = useState(false);
+  const [patrolCycles, setPatrolCycles] = useState<number | 'unlimited'>(3);
+  const [patrolScanCrop, setPatrolScanCrop] = useState(true);
+  const [patrolSoilTest, setPatrolSoilTest] = useState(false);
+
   // Soil Moisture State
   const [moistureData, setMoistureData] = useState<{ percentage: number; level: string; needsWatering: boolean } | null>(null);
   const [moistureLoading, setMoistureLoading] = useState(false);
-  const [samplingText, setSamplingText] = useState('');
 
   const measureSoilMoisture = async () => {
     if (!connectedIp) {
@@ -97,16 +80,16 @@ export default function RoverScreen() {
       return;
     }
     setMoistureLoading(true);
-    setSamplingText('Sampling soil moisture for 3 seconds...');
 
     try {
-      // Simulate 2.5 second sampling duration for realistic sensor reading
+      // 2.5 second sampling duration for realistic sensor reading
       await new Promise((resolve) => setTimeout(resolve, 2500));
 
       const response = await fetch(`http://${connectedIp}/read_moisture`);
       const data = await response.json();
       if (data.status === 'success') {
         const percentage = Number(data.moisture);
+        const rawAdc = Number(data.raw);
         const needsWatering = percentage < 35; // Under 35% means field needs irrigation
         setMoistureData({ percentage, level: data.level, needsWatering });
 
@@ -116,14 +99,23 @@ export default function RoverScreen() {
         } catch (err) {
           console.error('Failed to sync moisture to backend', err);
         }
+
+        // Display test result popup (raw ADC shown for calibration diagnostics)
+        Alert.alert(
+          '🌱 Soil Moisture Test Result',
+          `Moisture Level: ${percentage}%\nRaw ADC: ${rawAdc}\nStatus: ${needsWatering ? '⚠️ WATERING NEEDED' : '✅ SOIL MOIST / NO WATER NEEDED'}\n\n${
+            needsWatering
+              ? 'The plot is dry (under 35%). Please start irrigation on the Home screen.'
+              : 'Soil moisture is optimal. Irrigation is not required.'
+          }`
+        );
       } else {
         Alert.alert('Error', 'Could not read soil moisture data from Rover.');
       }
     } catch (e) {
-      Alert.alert('Connection Error', 'Failed to reach Rover moisture sensor. Ensure sensor is wired to pin IO0.');
+      Alert.alert('Connection Error', 'Failed to reach Rover moisture sensor. Ensure sensor is wired to pin IO2.');
     } finally {
       setMoistureLoading(false);
-      setSamplingText('');
     }
   };
 
@@ -158,7 +150,9 @@ export default function RoverScreen() {
   const sendCommand = async (action: string) => {
     if (!connectedIp) return;
     try {
-      const url = `http://${connectedIp}/${action}?${Date.now()}`;
+      // Safely append cache-buster depending on if action already has a query string
+      const separator = action.includes('?') ? '&' : '?';
+      const url = `http://${connectedIp}/${action}${separator}_=${Date.now()}`;
       await fetch(url, { method: 'GET' });
     } catch (e) {
       // ignore network errors from rover
@@ -188,9 +182,27 @@ export default function RoverScreen() {
     setIsScanMode(true);
     // Wait 2 seconds for the WebView to fully disconnect from the stream
     await new Promise(resolve => setTimeout(resolve, 2000));
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/rover_scan.php?rover_ip=${connectedIp}`);
-      const result = await response.json();
+      // 1. Phone captures image directly from Rover on the local network
+      const captureUrl = `http://${connectedIp}/capture`;
+      const imageResponse = await fetch(captureUrl);
+      if (!imageResponse.ok) throw new Error('Rover /capture failed');
+      
+      const blob = await imageResponse.blob();
+      
+      // 2. Phone uploads that image to InfinityFree in the cloud
+      const formData = new FormData();
+      formData.append('field_id', '1');
+      // @ts-ignore - React Native FormData accepts blobs
+      formData.append('image', blob, 'capture.jpg');
+      
+      const uploadResponse = await fetch(`${API_BASE_URL}/upload_image.php`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await uploadResponse.json();
       if (result.status === 'success') {
         setScanResult(result.data);
       } else {
@@ -198,7 +210,7 @@ export default function RoverScreen() {
       }
     } catch (error) {
       console.error(error);
-      alert('Failed to scan image. Ensure XAMPP is running, Python AI server is running, and the Rover is reachable.');
+      alert('Failed to scan image. Ensure the Rover is reachable on WiFi.');
     } finally {
       setIsScanning(false);
       // Resume the video stream
@@ -223,55 +235,99 @@ export default function RoverScreen() {
 
   const startPatrol = async () => {
     if (!connectedIp) return;
+    setShowPatrolSettings(false);
     patrolActiveRef.current = true;
     setIsPatrolling(true);
 
     let cycle = 0;
-    while (patrolActiveRef.current) {
+    const maxCycles = patrolCycles === 'unlimited' ? Infinity : patrolCycles;
+
+    while (patrolActiveRef.current && cycle < maxCycles) {
       cycle++;
+
       // Step 1: Drive forward
-      setPatrolStep(`Cycle ${cycle}: Moving forward...`);
+      setPatrolStep(`Cycle ${cycle}${patrolCycles !== 'unlimited' ? `/${patrolCycles}` : ''}: Moving forward...`);
       sendCommand('go');
       await new Promise(r => setTimeout(r, 3000));
       if (!patrolActiveRef.current) break;
 
       // Step 2: Stop
       sendCommand('stop');
-      setPatrolStep(`Cycle ${cycle}: Stopped — preparing to scan...`);
+      setPatrolStep(`Cycle ${cycle}: Stopped — preparing sensors...`);
       await new Promise(r => setTimeout(r, 1000));
       if (!patrolActiveRef.current) break;
 
-      // Step 3: Scan crop (same as tapping Scan Crop manually)
-      setPatrolStep(`Cycle ${cycle}: Scanning crop...`);
-      setIsScanning(true);
-      setIsScanMode(true);
-      await new Promise(r => setTimeout(r, 2000));
+      // Step 3 (Optional): Scan crop
+      if (patrolScanCrop) {
+        setPatrolStep(`Cycle ${cycle}: Scanning crop...`);
+        setIsScanning(true);
+        setIsScanMode(true);
+        await new Promise(r => setTimeout(r, 2000));
 
-      if (!patrolActiveRef.current) {
-        setIsScanning(false);
-        setIsScanMode(false);
-        break;
-      }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/rover_scan.php?rover_ip=${connectedIp}`);
-        const result = await response.json();
-        if (result.status === 'success') {
-          setScanResult(result.data);
-          // Patrol pauses here — resumes when user closes the result modal
-          patrolActiveRef.current = false;
-          setIsPatrolling(false);
-          setPatrolStep('');
+        if (!patrolActiveRef.current) {
+          setIsScanning(false);
+          setIsScanMode(false);
+          break;
         }
-      } catch (error) {
-        console.error('Patrol scan failed:', error);
-      } finally {
-        setIsScanning(false);
-        setIsScanMode(false);
+
+        try {
+          const captureUrl = `http://${connectedIp}/capture`;
+          const imageResponse = await fetch(captureUrl);
+          if (!imageResponse.ok) throw new Error('Rover /capture failed');
+          
+          const blob = await imageResponse.blob();
+          
+          const formData = new FormData();
+          formData.append('field_id', '1');
+          // @ts-ignore
+          formData.append('image', blob, 'capture.jpg');
+          
+          const uploadResponse = await fetch(`${API_BASE_URL}/upload_image.php`, {
+            method: 'POST',
+            body: formData,
+          });
+          
+          const result = await uploadResponse.json();
+          if (result.status === 'success') {
+            setScanResult(result.data);
+          }
+        } catch (error) {
+          console.error('Patrol scan failed:', error);
+        } finally {
+          setIsScanning(false);
+          setIsScanMode(false);
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+        if (!patrolActiveRef.current) break;
       }
 
-      // Wait a moment before next cycle
-      await new Promise(r => setTimeout(r, 1000));
+      // Step 4 (Optional): Test soil moisture
+      if (patrolSoilTest) {
+        setPatrolStep(`Cycle ${cycle}: Testing soil moisture...`);
+        setMoistureLoading(true);
+        try {
+          const response = await fetch(`http://${connectedIp}/read_moisture`);
+          const data = await response.json();
+          if (data.status === 'success') {
+            const percentage = Number(data.moisture);
+            setMoistureData({ percentage, level: data.level, needsWatering: percentage < 35 });
+            try {
+              await fetch(`${API_BASE_URL}/save_moisture.php?field_id=1&moisture=${percentage}`);
+            } catch (err) {}
+          }
+        } catch (e) {
+          console.error('Patrol moisture test failed:', e);
+        } finally {
+          setMoistureLoading(false);
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+        if (!patrolActiveRef.current) break;
+      }
+
+      // Brief pause before next cycle
+      await new Promise(r => setTimeout(r, 500));
     }
 
     sendCommand('stop');
@@ -364,7 +420,7 @@ export default function RoverScreen() {
               </View>
             ) : (
               <WebView
-                source={{ html: getStreamHtml(connectedIp) }}
+                source={{ html: getStreamHtml(connectedIp), baseUrl: `http://${connectedIp}` }}
                 style={styles.camera}
                 scrollEnabled={false}
                 bounces={false}
@@ -390,6 +446,7 @@ export default function RoverScreen() {
               style={[styles.btn, styles.btnGreen]}
               onPressIn={() => sendCommand('go')}
               onPressOut={() => sendCommand('stop')}
+              onPress={() => sendCommand('stop')}
               activeOpacity={0.7}
             >
               <IconSymbol name="chevron.up" size={28} color="#fff" />
@@ -402,6 +459,7 @@ export default function RoverScreen() {
               style={[styles.btn, styles.btnGreen]}
               onPressIn={() => sendCommand('left')}
               onPressOut={() => sendCommand('stop')}
+              onPress={() => sendCommand('stop')}
               activeOpacity={0.7}
             >
               <IconSymbol name="chevron.left" size={28} color="#fff" />
@@ -419,6 +477,7 @@ export default function RoverScreen() {
               style={[styles.btn, styles.btnGreen]}
               onPressIn={() => sendCommand('right')}
               onPressOut={() => sendCommand('stop')}
+              onPress={() => sendCommand('stop')}
               activeOpacity={0.7}
             >
               <IconSymbol name="chevron.right" size={28} color="#fff" />
@@ -431,14 +490,36 @@ export default function RoverScreen() {
               style={[styles.btn, styles.btnGreen]}
               onPressIn={() => sendCommand('back')}
               onPressOut={() => sendCommand('stop')}
+              onPress={() => sendCommand('stop')}
               activeOpacity={0.7}
             >
               <IconSymbol name="chevron.down" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
 
+          {/* Camera Tilt Controls */}
+          <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#34495e', flex: 1 }]}
+              onPress={() => sendCommand('tilt?angle=80')}
+              disabled={!connectedIp}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionBtnText}>📐 Tilt UP</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#34495e', flex: 1 }]}
+              onPress={() => sendCommand('tilt?angle=120')}
+              disabled={!connectedIp}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionBtnText}>📐 Tilt DOWN</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Scan & Light Controls */}
-          <View style={[styles.row, { marginTop: 14, gap: 14 }]}>
+          <View style={[styles.row, { marginTop: 10, gap: 14 }]}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: connectedIp ? '#3498db' : '#333' }]}
               onPress={handleScan}
@@ -464,15 +545,15 @@ export default function RoverScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Auto Patrol Button */}
-          <View style={[styles.row, { marginTop: 10 }]}>
+          {/* Row 2: Auto Patrol & Test Soil Moisture */}
+          <View style={[styles.row, { marginTop: 10, gap: 14 }]}>
             <TouchableOpacity
               style={[
-                styles.patrolBtn,
+                styles.actionBtn,
                 { backgroundColor: !connectedIp ? '#333' : isPatrolling ? '#e74c3c' : '#8e44ad' }
               ]}
-              onPress={isPatrolling ? stopPatrol : startPatrol}
-              disabled={!connectedIp || isScanning}
+              onPress={isPatrolling ? stopPatrol : () => setShowPatrolSettings(true)}
+              disabled={!connectedIp || isScanning || moistureLoading}
               activeOpacity={0.8}
             >
               {isPatrolling && isScanning ? (
@@ -483,61 +564,28 @@ export default function RoverScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                { backgroundColor: !connectedIp ? '#333' : moistureLoading ? '#d97706' : '#10B981' }
+              ]}
+              onPress={measureSoilMoisture}
+              disabled={!connectedIp || isScanning || isPatrolling || moistureLoading}
+              activeOpacity={0.8}
+            >
+              {moistureLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.actionBtnText}>🧪 Test Soil Moisture</Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Patrol Status */}
           {isPatrolling && patrolStep ? (
             <Text style={styles.patrolStatus}>{patrolStep}</Text>
           ) : null}
-
-          {/* Soil Moisture Control & Telemetry Card */}
-          <View style={styles.moistureCard}>
-            <View style={styles.moistureHeaderRow}>
-              <Text style={styles.moistureTitle}>🌱 Soil Moisture Telemetry</Text>
-              {moistureData && (
-                <View style={[
-                  styles.moistureBadge,
-                  { backgroundColor: moistureData.needsWatering ? '#7f1d1d' : '#064e3b' }
-                ]}>
-                  <Text style={[
-                    styles.moistureBadgeText,
-                    { color: moistureData.needsWatering ? '#f87171' : '#34d399' }
-                  ]}>
-                    {moistureData.needsWatering ? '⚠️ WATERING NEEDED' : '✅ NO WATER NEEDED'}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {moistureLoading ? (
-              <View style={styles.moistureGaugeContainer}>
-                <ActivityIndicator size="large" color="#10B981" />
-                <Text style={styles.samplingStatusText}>{samplingText}</Text>
-              </View>
-            ) : moistureData ? (
-              <View style={styles.moistureGaugeContainer}>
-                <Text style={styles.moisturePercentText}>{moistureData.percentage}%</Text>
-                <Text style={styles.moistureSubtext}>
-                  {moistureData.needsWatering 
-                    ? 'Soil is dry (under 35%). Field requires watering.' 
-                    : 'Soil moisture is optimal. Plot does not need watering.'}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.moisturePlaceholderText}>Tap the button below to sample soil moisture for 3 seconds.</Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.moistureBtn, { backgroundColor: !connectedIp ? '#333' : '#10B981' }]}
-              onPress={measureSoilMoisture}
-              disabled={!connectedIp || moistureLoading}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.actionBtnText}>
-                {moistureLoading ? 'Sampling...' : '🧪 Check Soil Moisture'}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Scan Result Modal */}
@@ -580,6 +628,95 @@ export default function RoverScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Patrol Settings Modal */}
+        <Modal
+          visible={showPatrolSettings}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowPatrolSettings(false)}
+        >
+          <View style={styles.modalBackground}>
+            <View style={[styles.modalContainer, { paddingBottom: 24 }]}>
+              <Text style={styles.modalHeader}>🤖 Auto Patrol Settings</Text>
+              <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 18 }}>
+                Configure what the rover does during each patrol cycle.
+              </Text>
+
+              {/* Cycles selector */}
+              <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 8 }}>How many cycles?</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                {([1, 3, 5, 10, 'unlimited'] as const).map(val => (
+                  <TouchableOpacity
+                    key={String(val)}
+                    onPress={() => setPatrolCycles(val)}
+                    style={{
+                      paddingVertical: 8, paddingHorizontal: 14,
+                      borderRadius: 8,
+                      backgroundColor: patrolCycles === val ? '#8e44ad' : '#2a2a2a',
+                      borderWidth: 1,
+                      borderColor: patrolCycles === val ? '#8e44ad' : '#444',
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>
+                      {val === 'unlimited' ? '♾ Unlimited' : `${val}x`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Scan crop toggle */}
+              <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 8 }}>Include at each stop:</Text>
+              <TouchableOpacity
+                onPress={() => setPatrolScanCrop(v => !v)}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 12,
+                  padding: 14, borderRadius: 10, marginBottom: 10,
+                  backgroundColor: patrolScanCrop ? '#1a3a2a' : '#1e1e1e',
+                  borderWidth: 1, borderColor: patrolScanCrop ? '#27ae60' : '#333',
+                }}
+              >
+                <Text style={{ fontSize: 22 }}>{patrolScanCrop ? '✅' : '⬜'}</Text>
+                <View>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>🌿 Scan Crop</Text>
+                  <Text style={{ color: '#888', fontSize: 12 }}>AI disease detection at each stop</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Soil test toggle */}
+              <TouchableOpacity
+                onPress={() => setPatrolSoilTest(v => !v)}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 12,
+                  padding: 14, borderRadius: 10, marginBottom: 24,
+                  backgroundColor: patrolSoilTest ? '#1a2a3a' : '#1e1e1e',
+                  borderWidth: 1, borderColor: patrolSoilTest ? '#3498db' : '#333',
+                }}
+              >
+                <Text style={{ fontSize: 22 }}>{patrolSoilTest ? '✅' : '⬜'}</Text>
+                <View>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>💧 Test Soil Moisture</Text>
+                  <Text style={{ color: '#888', fontSize: 12 }}>Probe soil at each stop</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Start / Cancel */}
+              <TouchableOpacity
+                style={[styles.modalCloseBtn, { backgroundColor: '#8e44ad', marginBottom: 10 }]}
+                onPress={startPatrol}
+              >
+                <Text style={styles.modalCloseBtnText}>🚀 Start Patrol</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalCloseBtn, { backgroundColor: '#333' }]}
+                onPress={() => setShowPatrolSettings(false)}
+              >
+                <Text style={styles.modalCloseBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
