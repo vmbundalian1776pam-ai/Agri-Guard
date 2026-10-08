@@ -369,7 +369,7 @@ export default function RoverScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={{paddingBottom: 40}} showsVerticalScrollIndicator={true}>
+        <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: 40}} showsVerticalScrollIndicator={true}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>🤖 Rover Control</Text>
