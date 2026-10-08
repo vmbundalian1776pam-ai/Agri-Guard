@@ -640,13 +640,13 @@ static esp_err_t ledoff_handler(httpd_req_t *req){
 
 
 static esp_err_t distance_handler(httpd_req_t *req){
-    Serial1.println("READ_DISTANCE");
+    Serial.println("READ_DISTANCE");
     int distance = 999;
     
     unsigned long startTime = millis();
     while(millis() - startTime < 2000) {
-        if (Serial1.available() > 0) {
-            String resp = Serial1.readStringUntil('\n');
+        if (Serial.available() > 0) {
+            String resp = Serial.readStringUntil('\n');
             resp.trim();
             if (resp.length() > 0) {
                 distance = resp.toInt();
@@ -674,7 +674,7 @@ static esp_err_t tilt_handler(httpd_req_t *req){
         }
     }
     // Send command to Arduino Uno via GPIO16 (SoftwareSerial RX on Uno Pin 3)
-    Serial1.printf("TILT:%d\n", angle);
+    Serial.printf("TILT:%d\n", angle);
     Serial.printf("[Servo] Tilt angle: %d\n", angle);
 
     httpd_resp_set_type(req, "application/json");
@@ -684,7 +684,7 @@ static esp_err_t tilt_handler(httpd_req_t *req){
 
 static esp_err_t moisture_handler(httpd_req_t *req){
     // Send READ_MOISTURE command to Arduino Uno
-    Serial1.println("READ_MOISTURE");
+    Serial.println("READ_MOISTURE");
     
     int rawValue = 650; // default
     
@@ -692,8 +692,8 @@ static esp_err_t moisture_handler(httpd_req_t *req){
     unsigned long startTime = millis();
     bool received = false;
     while(millis() - startTime < 5000) {
-        if (Serial1.available() > 0) {
-            String resp = Serial1.readStringUntil('\n');
+        if (Serial.available() > 0) {
+            String resp = Serial.readStringUntil('\n');
             resp.trim();
             if (resp.length() > 0) {
                 rawValue = resp.toInt();
@@ -733,7 +733,7 @@ static esp_err_t moisture_handler(httpd_req_t *req){
 
 void startCameraServer(){
     // Initialize Serial1 for Arduino Uno communication (TX on GPIO2, RX on GPIO3)
-    Serial1.begin(9600, SERIAL_8N1, 3, 2);
+    Serial.begin(9600, SERIAL_8N1, 3, 2);
     
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 16;
