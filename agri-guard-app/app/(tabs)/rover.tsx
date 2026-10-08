@@ -629,7 +629,7 @@ export default function RoverScreen() {
               {scanResult && (
                 <View style={styles.modalContent}>
                   <Image
-                    source={{ uri: scanResult.image_url.startsWith('http') ? scanResult.image_url : `${API_BASE_URL}/${scanResult.image_url}` }}
+                    source={{ uri: (scanResult.image_url.startsWith('data:') || scanResult.image_url.startsWith('http')) ? scanResult.image_url : `${API_BASE_URL}/${scanResult.image_url}` }}
                     style={styles.modalImage}
                   />
                   <Text style={styles.modalDisease}>{scanResult.disease}</Text>

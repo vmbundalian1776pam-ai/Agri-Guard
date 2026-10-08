@@ -135,7 +135,8 @@ export default function DashboardScreen() {
 
   const getImageUri = (path: string) => {
     if (!path) return '';
-    if (path.startsWith('http')) return path;
+    if (path.startsWith('data:')) return path;   // base64 inline - use as-is
+    if (path.startsWith('http')) return path;    // absolute URL
     return `${API_BASE_URL}/${path}`;
   };
 

@@ -58,12 +58,22 @@ extern void robot_setup();
 extern int gpLed =  4; // Light
 extern String WiFiAddr ="";
 
+// Hardware serial for talking to Arduino Uno
+// ESP32-CAM AI Thinker: GPIO16 = TX2, GPIO17 = RX2 (these are free pins)
+HardwareSerial ArduinoSerial(2); // UART2
+
 void startCameraServer();
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200);   // USB debug - for Serial Monitor only
   Serial.setDebugOutput(true);
   Serial.println();
+  
+  // Initialize hardware serial to talk to Arduino Uno
+  // GPIO16 = TX (connects to Arduino pin 3 RX), GPIO17 = RX (connects to Arduino pin 4 TX)
+  ArduinoSerial.begin(9600, SERIAL_8N1, 17, 16);
+  Serial.println("ArduinoSerial ready on GPIO16(TX)/GPIO17(RX)");
+
   robot_setup();
   pinMode(gpLed, OUTPUT); //Light
   digitalWrite(gpLed, LOW);

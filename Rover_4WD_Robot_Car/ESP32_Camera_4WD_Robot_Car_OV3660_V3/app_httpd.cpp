@@ -9,6 +9,9 @@
 #include "Arduino.h"
 #include "driver/ledc.h"
 
+// ArduinoSerial is defined in the main .ino file (UART2 on GPIO16/17)
+extern HardwareSerial ArduinoSerial;
+
 
 
 #define LEFT_M0     13
@@ -640,13 +643,14 @@ static esp_err_t ledoff_handler(httpd_req_t *req){
 
 
 static esp_err_t distance_handler(httpd_req_t *req){
-    Serial.println("READ_DISTANCE");
+    ArduinoSerial.println("READ_DISTANCE");
+    Serial.println("[ESP32->Arduino] READ_DISTANCE sent");
     int distance = 999;
     
     unsigned long startTime = millis();
     while(millis() - startTime < 2000) {
-        if (Serial.available() > 0) {
-            String resp = Serial.readStringUntil('\n');
+        if (ArduinoSerial.available() > 0) {
+            String resp = ArduinoSerial.readStringUntil('\n');
             resp.trim();
             if (resp.length() > 0) {
                 distance = resp.toInt();
@@ -673,9 +677,9 @@ static esp_err_t tilt_handler(httpd_req_t *req){
             angle = atoi(param);
         }
     }
-    // Send command to Arduino Uno via GPIO16 (SoftwareSerial RX on Uno Pin 3)
-    Serial.printf("TILT:%d\n", angle);
-    Serial.printf("[Servo] Tilt angle: %d\n", angle);
+    // Send TILT command to Arduino Uno via ArduinoSerial (GPIO16 TX)
+    ArduinoSerial.printf("TILT:%d\n", angle);
+    Serial.printf("[ESP32->Arduino] TILT:%d sent\n", angle);
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -683,21 +687,24 @@ static esp_err_t tilt_handler(httpd_req_t *req){
 }
 
 static esp_err_t moisture_handler(httpd_req_t *req){
-    // Send READ_MOISTURE command to Arduino Uno
-    Serial.println("READ_MOISTURE");
+    // Send READ_MOISTURE command to Arduino Uno via ArduinoSerial (GPIO16 TX)
+    ArduinoSerial.println("READ_MOISTURE");
+    Serial.println("[ESP32->Arduino] READ_MOISTURE sent");
     
     int rawValue = 650; // default
     
-    // Wait for Arduino to physically move the arm and read the sensor (up to 5 seconds)
+    // Wait for Arduino to physically move the arm and read the sensor (up to 8 seconds)
     unsigned long startTime = millis();
     bool received = false;
-    while(millis() - startTime < 5000) {
-        if (Serial.available() > 0) {
-            String resp = Serial.readStringUntil('\n');
+    while(millis() - startTime < 8000) {
+        if (ArduinoSerial.available() > 0) {
+            String resp = ArduinoSerial.readStringUntil('\n');
             resp.trim();
             if (resp.length() > 0) {
                 rawValue = resp.toInt();
                 received = true;
+                Serial.print("[Arduino->ESP32] Moisture raw ADC: ");
+                Serial.println(rawValue);
             }
             break;
         }
@@ -705,7 +712,7 @@ static esp_err_t moisture_handler(httpd_req_t *req){
     }
 
     if (!received) {
-        Serial.println("[Moisture] Timeout waiting for Arduino");
+        Serial.println("[Moisture] Timeout - Arduino did not respond in 8s");
     }
 
     const int DRY_ADC = 410;  // Arduino 10-bit ADC dry air
@@ -732,9 +739,7 @@ static esp_err_t moisture_handler(httpd_req_t *req){
 }
 
 void startCameraServer(){
-    // Initialize Serial1 for Arduino Uno communication (TX on GPIO2, RX on GPIO3)
-    Serial.begin(9600, SERIAL_8N1, 3, 2);
-    
+    // Note: ArduinoSerial (UART2 on GPIO16/17) is initialized in setup()
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 16;
 
