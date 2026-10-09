@@ -70,9 +70,10 @@ void setup() {
   Serial.println();
   
   // Initialize hardware serial to talk to Arduino Uno
-  // GPIO16 = TX (connects to Arduino pin 3 RX), GPIO17 = RX (connects to Arduino pin 4 TX)
-  ArduinoSerial.begin(9600, SERIAL_8N1, 17, 16);
-  Serial.println("ArduinoSerial ready on GPIO16(TX)/GPIO17(RX)");
+  // ESP32 IO16 (TX) connects to Arduino Pin 3 (RX)
+  // ESP32 IO2 (RX) connects to Arduino Pin 4 (TX)
+  ArduinoSerial.begin(9600, SERIAL_8N1, 2, 16);
+  Serial.println("ArduinoSerial ready on GPIO16(TX)/GPIO2(RX)");
 
   robot_setup();
   pinMode(gpLed, OUTPUT); //Light
