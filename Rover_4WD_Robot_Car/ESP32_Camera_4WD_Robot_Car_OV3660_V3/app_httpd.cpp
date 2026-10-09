@@ -738,6 +738,42 @@ static esp_err_t moisture_handler(httpd_req_t *req){
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
+static esp_err_t temp_handler(httpd_req_t *req){
+    ArduinoSerial.println("READ_TEMP");
+    Serial.println("[ESP32->Arduino] READ_TEMP sent");
+    
+    float tempC = 0.0;
+    
+    unsigned long startTime = millis();
+    bool received = false;
+    while(millis() - startTime < 5000) {
+        if (ArduinoSerial.available() > 0) {
+            String resp = ArduinoSerial.readStringUntil('\n');
+            resp.trim();
+            if (resp.length() > 0) {
+                tempC = resp.toFloat();
+                received = true;
+                Serial.print("[Arduino->ESP32] Temp: ");
+                Serial.println(tempC);
+            }
+            break;
+        }
+        delay(50);
+    }
+
+    if (!received) {
+        Serial.println("[Temp] Timeout - Arduino did not respond");
+    }
+
+    char json_response[64];
+    snprintf(json_response, sizeof(json_response), 
+        "{\"status\":\"success\",\"temperature\":%.2f}", tempC);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, json_response, strlen(json_response));
+}
+
 void startCameraServer(){
     // Note: ArduinoSerial (UART2 on GPIO16/17) is initialized in setup()
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -840,6 +876,13 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
+    httpd_uri_t temp_uri = {
+        .uri       = "/read_temp",
+        .method    = HTTP_GET,
+        .handler   = temp_handler,
+        .user_ctx  = NULL
+    };
+
    httpd_uri_t stream_uri = {
         .uri       = "/stream",
         .method    = HTTP_GET,
@@ -863,6 +906,7 @@ void startCameraServer(){
         httpd_register_uri_handler(camera_httpd, &moisture_uri);
         httpd_register_uri_handler(camera_httpd, &tilt_uri);
         httpd_register_uri_handler(camera_httpd, &distance_uri);
+        httpd_register_uri_handler(camera_httpd, &temp_uri);
     }
 
     config.server_port += 1;
