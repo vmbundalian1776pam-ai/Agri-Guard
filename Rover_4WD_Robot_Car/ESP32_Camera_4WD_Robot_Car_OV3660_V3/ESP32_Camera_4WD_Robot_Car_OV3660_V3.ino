@@ -65,16 +65,16 @@ HardwareSerial ArduinoSerial(2); // UART2
 void startCameraServer();
 
 void setup() {
-  // USB debug - for Serial Monitor only. We disable RX (-1) so Pin 3 is free for Arduino!
-  Serial.begin(115200, SERIAL_8N1, -1, 1); 
+  // USB debug - for Serial Monitor only.
+  Serial.begin(115200); 
   Serial.setDebugOutput(true);
   Serial.println();
   
   // Initialize hardware serial to talk to Arduino Uno
-  // ESP32 RX = Pin 3 (U0R), TX = Pin 2 (IO2)
-  // This matches your wiring: IO2 -> Uno Pin 3, U0R -> Uno Pin 4
-  ArduinoSerial.begin(9600, SERIAL_8N1, 3, 2);
-  Serial.println("ArduinoSerial ready on RX=3, TX=2");
+  // ESP32 TX = Pin 2 (IO2), RX = Pin 16 (IO16)
+  // Wiring: ESP32 IO2 -> Uno Pin 3. ESP32 IO16 -> Uno Pin 4.
+  ArduinoSerial.begin(9600, SERIAL_8N1, 16, 2);
+  Serial.println("ArduinoSerial ready on RX=16, TX=2");
 
   robot_setup();
   pinMode(gpLed, OUTPUT); //Light

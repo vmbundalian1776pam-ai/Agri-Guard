@@ -85,7 +85,10 @@ export default function RoverScreen() {
       // 2.5 second sampling duration for realistic sensor reading
       await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      const response = await fetch(`http://${connectedIp}/read_moisture`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(`http://${connectedIp}/read_moisture`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await response.json();
       if (data.status === 'success') {
         const percentage = Number(data.moisture);
@@ -235,7 +238,7 @@ export default function RoverScreen() {
       }
     } catch (error) {
       console.error(error);
-      alert('Failed to scan image. Ensure the Rover is reachable on WiFi.');
+      alert('Failed to scan image. Error: ' + error.message);
     } finally {
       setIsScanning(false);
       // Resume the video stream
@@ -332,7 +335,10 @@ export default function RoverScreen() {
         setPatrolStep(`Cycle ${cycle}: Testing soil moisture...`);
         setMoistureLoading(true);
         try {
-          const response = await fetch(`http://${connectedIp}/read_moisture`);
+          const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(`http://${connectedIp}/read_moisture`, { signal: controller.signal });
+      clearTimeout(timeoutId);
           const data = await response.json();
           if (data.status === 'success') {
             const percentage = Number(data.moisture);

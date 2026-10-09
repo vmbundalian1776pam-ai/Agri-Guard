@@ -55,13 +55,18 @@ export default function DashboardScreen() {
   const [filterTime, setFilterTime] = useState('All');       // 'All', 'Today', '7 Days', '30 Days'
   
   // The IP Address of the new ESP32 Watering System
-  const WATER_SYSTEM_IP = 'http://192.168.100.225';
+  
+
+    const WATER_SYSTEM_IP = 'http://172.20.10.6';
 
   const toggleWatering = async () => {
     setWaterLoading(true);
     try {
       const endpoint = isWatering ? '/water_off' : '/water_on';
-      const response = await fetch(`${WATER_SYSTEM_IP}${endpoint}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const response = await fetch(`${WATER_SYSTEM_IP}${endpoint}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (response.ok) {
         setIsWatering(!isWatering);
       } else {
