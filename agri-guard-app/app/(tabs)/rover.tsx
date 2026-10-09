@@ -82,66 +82,86 @@ export default function RoverScreen() {
     setMoistureLoading(true);
 
     try {
-      // 2.5 second sampling duration for realistic sensor reading
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // Fetch moisture and temperature in parallel
+      const moistureController = new AbortController();
+      const moistureTimeout = setTimeout(() => moistureController.abort(), 15000);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const response = await fetch(`http://${connectedIp}/read_moisture`, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      const data = await response.json();
-      if (data.status === 'success') {
-        const percentage = Number(data.moisture);
-        const rawAdc = Number(data.raw);
-        const needsWatering = percentage < 35; // Under 35% means field needs irrigation
-        setMoistureData({ percentage, level: data.level, needsWatering });
+      const tempController = new AbortController();
+      const tempTimeout = setTimeout(() => tempController.abort(), 10000);
 
-        // Sync reading with backend database so Home screen gets updated
-        try {
-          await fetch(`${API_BASE_URL}/save_moisture.php?field_id=1&moisture=${percentage}`);
-        } catch (err) {
-          console.error('Failed to sync moisture to backend', err);
+      const [moistureRes, tempRes] = await Promise.allSettled([
+        fetch(`http://${connectedIp}/read_moisture`, { signal: moistureController.signal }),
+        fetch(`http://${connectedIp}/read_temp`,     { signal: tempController.signal }),
+      ]);
+
+      clearTimeout(moistureTimeout);
+      clearTimeout(tempTimeout);
+
+      let percentage = 0;
+      let rawAdc = 0;
+      let level = 'unknown';
+      let tempC: number | null = null;
+
+      if (moistureRes.status === 'fulfilled' && moistureRes.value.ok) {
+        const data = await moistureRes.value.json();
+        if (data.status === 'success') {
+          percentage = Number(data.moisture);
+          rawAdc     = Number(data.raw);
+          level      = data.level;
         }
+      }
 
-        // Auto Watering Trigger
-        if (needsWatering) {
-          try {
-            const WATER_SYSTEM_IP = 'http://192.168.100.225';
-            const waterRes = await fetch(`${WATER_SYSTEM_IP}/water_on`);
-            if (waterRes.ok) {
-              Alert.alert(
-                '🌱 Auto-Watering Activated', 
-                `Soil moisture is extremely low (${percentage}%).\n\nThe watering system has been automatically started and will run for 10 seconds.`
-              );
-              
-              // 10 second auto shut-off
-              setTimeout(async () => {
-                try {
-                  await fetch(`${WATER_SYSTEM_IP}/water_off`);
-                  console.log("Watering system auto-stopped after 10 seconds.");
-                } catch (e) {
-                  console.error("Failed to turn off water", e);
-                }
-              }, 10000);
+      if (tempRes.status === 'fulfilled' && tempRes.value.ok) {
+        const tdata = await tempRes.value.json();
+        if (tdata.status === 'success') {
+          tempC = Number(tdata.temperature);
+        }
+      }
 
-            } else {
-              Alert.alert('⚠️ Auto-Watering Failed', `Soil moisture is low (${percentage}%), but the watering system returned an error.`);
-            }
-          } catch (err) {
-            Alert.alert('⚠️ Auto-Watering Failed', `Soil moisture is low (${percentage}%), but could not connect to watering system at 192.168.100.225.`);
+      const needsWatering = percentage < 35;
+      setMoistureData({ percentage, level, needsWatering });
+
+      // Sync to backend so Home screen is updated
+      try {
+        const params = `field_id=1&moisture=${percentage}${tempC !== null ? `&temperature=${tempC}` : ''}`;
+        await fetch(`${API_BASE_URL}/save_moisture.php?${params}`);
+      } catch (err) {
+        console.error('Failed to sync to backend', err);
+      }
+
+      const tempStr = tempC !== null ? `${tempC.toFixed(1)}°C` : '--°C';
+
+      // Auto Watering Trigger
+      if (needsWatering) {
+        const WATER_SYSTEM_IP = 'http://172.20.10.6';
+        try {
+          const waterRes = await fetch(`${WATER_SYSTEM_IP}/water_on`);
+          if (waterRes.ok) {
+            Alert.alert(
+              '🌱 Auto-Watering Activated',
+              `Soil Moisture: ${percentage}%\nTemperature: ${tempStr}\nRaw ADC: ${rawAdc}\n\nSoil is dry — the watering system has been started and will run for 10 seconds.`
+            );
+            setTimeout(async () => {
+              try { await fetch(`${WATER_SYSTEM_IP}/water_off`); }
+              catch (e) { console.error('Failed to auto-stop water', e); }
+            }, 10000);
+          } else {
+            Alert.alert('⚠️ Auto-Watering Failed', `Soil is low (${percentage}%), but the watering system returned an error.`);
           }
-        } else {
-          // Display normal test result popup if no watering is needed
+        } catch (err) {
           Alert.alert(
-            '🌱 Soil Moisture Test Result',
-            `Moisture Level: ${percentage}%\nRaw ADC: ${rawAdc}\nStatus: ✅ SOIL MOIST\n\nSoil moisture is optimal. Irrigation is not required.`
+            '🌱 Soil Reading Done',
+            `Soil Moisture: ${percentage}%\nTemperature: ${tempStr}\nRaw ADC: ${rawAdc}\n\nSoil is dry — could not reach watering system automatically.`
           );
         }
       } else {
-        Alert.alert('Error', 'Could not read soil moisture data from Rover.');
+        Alert.alert(
+          '🌱 Soil & Temperature Result',
+          `Soil Moisture: ${percentage}%\nTemperature: ${tempStr}\nRaw ADC: ${rawAdc}\n\nSoil moisture is optimal. Irrigation is not required.`
+        );
       }
-    } catch (e) {
-      Alert.alert('Connection Error', 'Failed to reach Rover moisture sensor. Ensure sensor is wired to pin IO2.');
+    } catch (e: any) {
+      Alert.alert('Connection Error', `Failed to read sensor: ${e.message}`);
     } finally {
       setMoistureLoading(false);
     }
