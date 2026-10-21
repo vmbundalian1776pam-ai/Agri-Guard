@@ -93,7 +93,7 @@ void loop() {
     Serial.println(command);
 
     // ── 1. SOIL MOISTURE ───────────────────────────────────────────────────
-    if (command == "READ_MOISTURE") {
+    if (command.indexOf("READ_MOISTURE") >= 0) {
       moveBurrow(60, 1500);     // Arm DOWN into soil
       delay(1000);              // Let sensor settle
 
@@ -117,7 +117,7 @@ void loop() {
     }
 
     // ── 3. TEMPERATURE ─────────────────────────────────────────────────────
-    else if (command == "READ_TEMP") {
+    else if (command.indexOf("READ_TEMP") >= 0) {
       tempSensor.requestTemperatures();
       float tempC = tempSensor.getTempCByIndex(0);
       espSerial.println(tempC);

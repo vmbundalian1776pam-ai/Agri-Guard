@@ -82,42 +82,48 @@ export default function RoverScreen() {
     setMoistureLoading(true);
 
     try {
-      // Fetch moisture and temperature in parallel
+      // Step 1: Read Moisture (moves servo arm down, reads A0, moves arm back up ~4 seconds total)
       const moistureController = new AbortController();
-      const moistureTimeout = setTimeout(() => moistureController.abort(), 15000);
-
-      const tempController = new AbortController();
-      const tempTimeout = setTimeout(() => tempController.abort(), 10000);
-
-      const [moistureRes, tempRes] = await Promise.allSettled([
-        fetch(`http://${connectedIp}/read_moisture`, { signal: moistureController.signal }),
-        fetch(`http://${connectedIp}/read_temp`,     { signal: tempController.signal }),
-      ]);
-
-      clearTimeout(moistureTimeout);
-      clearTimeout(tempTimeout);
+      const moistureTimeout = setTimeout(() => moistureController.abort(), 12000);
 
       let percentage = 0;
       let rawAdc = 0;
       let level = 'unknown';
+
+      try {
+        const moistureRes = await fetch(http:///read_moisture, { signal: moistureController.signal });
+        clearTimeout(moistureTimeout);
+        if (moistureRes.ok) {
+          const data = await moistureRes.json();
+          if (data.status === 'success') {
+            percentage = Number(data.moisture);
+            rawAdc     = Number(data.raw);
+            level      = data.level;
+          }
+        }
+      } catch (mErr) {
+        clearTimeout(moistureTimeout);
+        console.warn('Moisture fetch error:', mErr);
+      }
+
+      // Step 2: Read Temperature AFTER moisture routine finishes so serial commands never collide
       let tempC: number | null = null;
+      const tempController = new AbortController();
+      const tempTimeout = setTimeout(() => tempController.abort(), 6000);
 
-      if (moistureRes.status === 'fulfilled' && moistureRes.value.ok) {
-        const data = await moistureRes.value.json();
-        if (data.status === 'success') {
-          percentage = Number(data.moisture);
-          rawAdc     = Number(data.raw);
-          level      = data.level;
+      try {
+        const tempRes = await fetch(http:///read_temp, { signal: tempController.signal });
+        clearTimeout(tempTimeout);
+        if (tempRes.ok) {
+          const tdata = await tempRes.json();
+          if (tdata.status === 'success') {
+            tempC = Number(tdata.temperature);
+          }
         }
+      } catch (tErr) {
+        clearTimeout(tempTimeout);
+        console.warn('Temperature fetch error:', tErr);
       }
-
-      if (tempRes.status === 'fulfilled' && tempRes.value.ok) {
-        const tdata = await tempRes.value.json();
-        if (tdata.status === 'success') {
-          tempC = Number(tdata.temperature);
-        }
-      }
-
       const needsWatering = percentage < 35;
       setMoistureData({ percentage, level, needsWatering });
 

@@ -688,7 +688,9 @@ static esp_err_t tilt_handler(httpd_req_t *req){
 
 static esp_err_t moisture_handler(httpd_req_t *req){
     // Send READ_MOISTURE command to Arduino Uno via ArduinoSerial (GPIO16 TX)
+    while(ArduinoSerial.available()) ArduinoSerial.read();
     ArduinoSerial.println("READ_MOISTURE");
+    ArduinoSerial.flush();
     Serial.println("[ESP32->Arduino] READ_MOISTURE sent");
     
     int rawValue = 650; // default
@@ -739,7 +741,9 @@ static esp_err_t moisture_handler(httpd_req_t *req){
 }
 
 static esp_err_t temp_handler(httpd_req_t *req){
+    while(ArduinoSerial.available()) ArduinoSerial.read();
     ArduinoSerial.println("READ_TEMP");
+    ArduinoSerial.flush();
     Serial.println("[ESP32->Arduino] READ_TEMP sent");
     
     float tempC = 0.0;
