@@ -91,7 +91,7 @@ export default function RoverScreen() {
       let level = 'unknown';
 
       try {
-        const moistureRes = await fetch(http:///read_moisture, { signal: moistureController.signal });
+        const moistureRes = await fetch(`http://${connectedIp}/read_moisture`, { signal: moistureController.signal });
         clearTimeout(moistureTimeout);
         if (moistureRes.ok) {
           const data = await moistureRes.json();
@@ -112,7 +112,7 @@ export default function RoverScreen() {
       const tempTimeout = setTimeout(() => tempController.abort(), 6000);
 
       try {
-        const tempRes = await fetch(http:///read_temp, { signal: tempController.signal });
+        const tempRes = await fetch(`http://${connectedIp}/read_temp`, { signal: tempController.signal });
         clearTimeout(tempTimeout);
         if (tempRes.ok) {
           const tdata = await tempRes.json();
